@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}7H Stock Analyzer - AI-Powered Investment Insights{% endblock %}</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-layout">
+        <!-- Side Menu -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>📈 7H Stock Analyzer</h2>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="/" class="nav-link" id="nav-portfolio">
+                    <span class="nav-icon">🏠</span>
+                    <span class="nav-text">Portfolio</span>
+                </a>
+                <a href="/watchlist" class="nav-link" id="nav-watchlist">
+                    <span class="nav-icon">⭐</span>
+                    <span class="nav-text">Watchlist</span>
+                </a>
+                <a href="/market" class="nav-link" id="nav-market">
+                    <span class="nav-icon">📊</span>
+                    <span class="nav-text">Market</span>
+                </a>
+                <a href="/etf" class="nav-link" id="nav-etf">
+                    <span class="nav-icon">📈</span>
+                    <span class="nav-text">ETFs/Indexes</span>
+                </a>
+                <a href="/import_portfolio" class="nav-link" id="nav-import">
+                    <span class="nav-icon">📥</span>
+                    <span class="nav-text">Import Portfolio</span>
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <div class="container">
+                <header>
+                    <h1>📈 7H Stock Analyzer</h1>
+                    <p class="subtitle">AI-Powered Investment Intelligence & Market Insights</p>
+                </header>
+                
+                <main>
+                    {% block content %}{% endblock %}
+                </main>
+                
+                <footer>
+                    <p>⚠️ Disclaimer: This tool is for educational purposes only. Not financial advice.</p>
+                    <p style="margin-top: 10px; font-size: 0.8rem; opacity: 0.7;">© 2026 7H Stock Analyzer | Developed by @rajen.sriram</p>
+                </footer>
+            </div>
+        </div>
+    </div>
+    
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
+
