@@ -2,6 +2,8 @@
 
 A comprehensive, modular stock analysis system built with serverless architecture. Features automated technical analysis, recommendation engine, and real-time notifications.
 
+![Architecture Overview](readme.png)
+
 ## 🚀 Features
 
 - **Modular Architecture**: Data Loader → Indicator Engine → Signal Engine → Recommendation Engine
