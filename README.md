@@ -102,8 +102,14 @@ A comprehensive serverless stock analysis system built with AWS Lambda, EventBri
 │   ├── package.json          # Node.js dependencies
 │   ├── vite.config.js        # Vite configuration
 │   └── tailwind.config.js    # Tailwind configuration
-├── infra/
-│   └── template.yaml         # Enhanced AWS SAM infrastructure
+├── infra/                     # Infrastructure and deployment
+│   ├── template.yaml         # AWS SAM infrastructure template
+│   ├── scripts/              # Deployment and build scripts
+│   │   ├── deploy.sh        # Main deployment script
+│   │   ├── build_layer.sh   # Lambda layer build script
+│   │   ├── build_package.sh # Lambda packaging script
+│   │   └── test_local.sh    # Local testing script
+│   └── env.example          # Environment variables template
 ├── input/                    # Configuration files
 │   ├── config_portfolio.txt
 │   ├── config_watchlist.txt
@@ -122,28 +128,42 @@ A comprehensive serverless stock analysis system built with AWS Lambda, EventBri
 - SAM CLI installed (`pip install aws-sam-cli`)
 - Node.js 18+ and npm
 - Python 3.10+
+- Pushover account (optional, for notifications)
 
-### 1. Deploy Infrastructure
+### 1. Clone and Setup
+```bash
+git clone <repository>
+cd 7h-stock-analyzer
+```
+
+### 2. Deploy Infrastructure
 
 ```bash
-# Navigate to project directory
-cd 7h-stock-analyzer
-
 # Deploy with AWS SAM (guided mode for first time)
 sam deploy --guided
 
-# Note your API Gateway URL and S3 bucket URL from the output
+# Or use the quick deployment script
+chmod +x infra/scripts/deploy.sh
+./infra/scripts/deploy.sh
 ```
 
-### 2. Configure Environment Variables
+This will:
+- Build Lambda layer and package
+- Deploy CloudFormation stack
+- Configure all resources (Lambda, EventBridge, S3, API Gateway)
+- Set up monitoring and alarms
+- Output API endpoints and S3 bucket URL
+
+### 3. Configure Environment Variables
 
 Set these in the Lambda function console or via SAM parameters:
 - `PUSHOVER_TOKEN`: Your Pushover app token (optional)
 - `PUSHOVER_USER`: Your Pushover user key (optional)
 - `S3_BUCKET_NAME`: Your S3 bucket name (auto-configured)
 - `ENABLE_NOTIFICATIONS`: Set to "true" to enable Pushover alerts
+- `ALERT_EMAIL`: Email for CloudWatch alerts (optional)
 
-### 3. Build and Deploy Frontend
+### 4. Configure and Deploy Frontend
 
 ```bash
 # Navigate to frontend
@@ -152,6 +172,13 @@ cd frontend
 # Install dependencies
 npm install
 
+# Configure environment
+cp infra/env.example .env.local
+# Edit .env.local with your deployed values:
+# - REACT_APP_S3_BUCKET: From deployment output
+# - REACT_APP_API_BASE_URL: From deployment output  
+# - REACT_APP_S3_REGION: Your AWS region
+
 # Build for production
 npm run build
 
@@ -159,11 +186,12 @@ npm run build
 aws s3 sync dist/ s3://your-bucket-name/ --delete
 ```
 
-### 4. Test the Application
+### 5. Test the Application
 
 1. **Health Check**: `https://your-api-gateway-url.com/health`
 2. **Manual Run**: `POST https://your-api-gateway-url.com/run-now`
 3. **Web Interface**: `http://your-bucket-name.s3-website-us-east-1.amazonaws.com`
+4. **Test Notifications**: `POST https://your-api-gateway-url.com/notifications/test`
 
 ## 🔧 Configuration
 
@@ -394,7 +422,255 @@ npm run build
 aws s3 sync dist/ s3://your-bucket-name/ --delete
 ```
 
-## 🐛 Troubleshooting
+## �️ Detailed Deployment Options
+
+### Manual Deployment Steps
+
+#### Build Lambda Layer
+```bash
+./infra/scripts/build_layer.sh
+```
+
+#### Build Lambda Package
+```bash
+./infra/scripts/build_package.sh
+```
+
+#### Deploy with SAM (Advanced)
+```bash
+sam deploy \
+    --template-file infra/template.yaml \
+    --stack-name 7h-stock-analyzer \
+    --region us-east-1 \
+    --parameter-overrides \
+        Environment=prod \
+        EnableVpc=false \
+    --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
+    --no-confirm-changeset
+```
+
+### Environment Configuration
+
+#### Backend Environment Variables
+```bash
+# Required
+AWS_REGION=us-east-1
+S3_BUCKET_NAME=your-bucket-name
+
+# Optional (Notifications)
+PUSHOVER_TOKEN=your_app_token
+PUSHOVER_USER=your_user_key
+ENABLE_NOTIFICATIONS=true
+ALERT_EMAIL=alerts@example.com
+
+# Performance
+DEFAULT_PERIOD=6mo
+BATCH_SIZE=50
+MAX_RETRIES=3
+REQUEST_TIMEOUT=30
+```
+
+#### Frontend Environment Variables (.env.local)
+```bash
+# Copy from infrastructure template
+cp infra/env.example frontend/.env.local
+
+# Edit with your deployed values:
+REACT_APP_S3_BUCKET=your-bucket-name
+REACT_APP_API_BASE_URL=https://your-api-gateway-url.com
+REACT_APP_S3_REGION=us-east-1
+```
+
+## 📊 S3 Data Structure
+
+```
+s3://bucket/
+├── data/
+│   ├── latest.json          # Latest recommendations
+│   └── daily/
+│       ├── 2024-01-01.json  # Daily snapshots
+│       └── ...
+├── config/
+│   ├── watchlist.json       # Watchlist configuration
+│   ├── portfolio.json       # Portfolio configuration
+│   ├── us_stocks.json       # US stocks configuration
+│   └── etfs.json           # ETFs configuration
+├── recon/
+│   └── daily/              # Daily reconciliation data
+├── charts/                 # Price chart images
+└── public/                 # Static website files
+```
+
+## 🔒 Enhanced Security Configuration
+
+### Lambda Security
+- IAM roles with minimal permissions
+- VPC isolation (optional)
+- Environment variable encryption
+- X-Ray tracing enabled
+
+### S3 Security
+- Server-side encryption (AES256)
+- Public access blocked for data buckets
+- Versioning enabled
+- Lifecycle policies for cost optimization
+- Bucket policies for least privilege access
+
+### API Gateway Security
+- Throttling limits (100 requests per minute)
+- CORS configuration
+- Request validation
+- API keys (optional)
+- WAF integration (optional)
+
+## 💰 Cost Optimization Details
+
+### Lambda Configuration
+- **Memory**: 1024MB (adjustable)
+- **Timeout**: 5 minutes (max 15)
+- **Reserved Concurrency**: 5
+- **Layer Reuse**: Shared dependencies
+
+### S3 Optimization
+- **Lifecycle Policies**: 
+  - Transition to Standard-IA after 30 days
+  - Transition to Glacier after 90 days
+  - Delete after 1000 days
+- **Intelligent Tiering**: Automatic cost optimization
+- **Compression**: JSON data compression
+
+### Monitoring Costs
+- **CloudWatch Logs**: 14-day retention
+- **Metrics**: Custom metrics for recommendations
+- **Alarms**: Cost and performance alerts
+- **Dashboard**: Pre-built monitoring dashboard
+
+## 🐛 Enhanced Troubleshooting
+
+### Common Issues and Solutions
+
+#### Lambda Timeout Issues
+```bash
+# Check current configuration
+sam logs -n StockAnalyzerFunction --tail
+
+# Solutions:
+# 1. Increase timeout in template.yaml
+# 2. Reduce batch size in configuration
+# 3. Monitor Yahoo Finance API rate limits
+# 4. Optimize symbol processing
+```
+
+#### S3 Access Issues
+```bash
+# Verify bucket policy
+aws s3api get-bucket-policy --bucket your-bucket
+
+# Check IAM permissions
+aws iam get-role-policy --role-name YourLambdaRole --policy-name YourPolicy
+
+# Test S3 access
+aws s3 ls s3://your-bucket/
+```
+
+#### Frontend Loading Issues
+```bash
+# Check S3 website configuration
+aws s3api get-bucket-website --bucket your-bucket
+
+# Verify build files
+aws s3 ls s3://your-bucket/ --recursive
+
+# Check CORS settings
+aws s3api get-bucket-cors --bucket your-bucket
+```
+
+#### Pushover Notification Issues
+```bash
+# Test configuration
+curl -X POST https://your-api-gateway-url.com/notifications/test
+
+# Check environment variables
+aws lambda get-function-configuration --function-name YourFunction
+
+# Verify Pushover credentials
+curl -X POST "https://api.pushover.net/1/users/validate.json" \
+  -d "token=YOUR_TOKEN" \
+  -d "user=YOUR_USER"
+```
+
+### Debug Commands
+
+```bash
+# Monitor Lambda logs in real-time
+aws logs tail /aws/lambda/stock-analyzer-function --follow
+
+# Test Lambda locally
+sam local invoke StockAnalyzerFunction --event events/test-event.json
+
+# Check CloudFormation stack status
+aws cloudformation describe-stacks --stack-name 7h-stock-analyzer
+
+# Monitor S3 storage usage
+aws s3 ls s3://your-bucket --recursive --human-readable --summarize
+
+# Test API endpoints
+aws apigateway test-invoke-method \
+  --rest-api-id your-api-id \
+  --resource-id your-resource-id \
+  --http-method GET \
+  --path-with-query-string "/health"
+```
+
+## 📅 Maintenance Schedule
+
+### Daily Tasks
+- Monitor CloudWatch alarms
+- Check recommendation quality
+- Review cost metrics
+- Verify data freshness
+
+### Weekly Tasks
+- Update watchlist configurations
+- Review reconciliation data
+- Optimize Lambda performance
+- Check notification effectiveness
+
+### Monthly Tasks
+- Review and rotate API keys
+- Update dependencies
+- Audit security settings
+- Analyze performance trends
+- Review cost optimization
+
+### Quarterly Tasks
+- Full security audit
+- Architecture review
+- Disaster recovery testing
+- Performance benchmarking
+
+## 🚀 Scaling Considerations
+
+### High Volume Scenarios
+- Increase Lambda concurrency limits
+- Implement batch processing optimization
+- Consider Step Functions for complex workflows
+- Add DynamoDB for caching
+
+### Multi-Region Deployment
+- Deploy to multiple AWS regions
+- Configure Route53 for failover
+- Implement S3 cross-region replication
+- Set up regional API Gateways
+
+### Enterprise Features
+- AWS WAF integration for security
+- Lambda authorizers for authentication
+- VPC endpoints for private connectivity
+- CloudTrail for comprehensive auditing
+- Config Rules for compliance monitoring
+
+## � Troubleshooting
 
 ### Common Issues
 

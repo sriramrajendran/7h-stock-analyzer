@@ -77,3 +77,35 @@ htmlcov/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+
+# Security - Sensitive files
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+secrets/
+credentials/
+.aws/
+.gcp/
+.azure/
+
+# IDE secrets
+.vscode/settings.json
+.idea/workspace.xml
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Temporary credentials
+temp_credentials*
+*.tmp
