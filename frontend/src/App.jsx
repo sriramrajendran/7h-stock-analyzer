@@ -112,6 +112,7 @@ function App() {
         <div className="flex justify-between h-16">
           <div className="flex">
             <div className="flex-shrink-0 flex items-center">
+              <img src="/stock-icon.svg" alt="7H Stock Analyzer" className="h-8 w-8 mr-2" />
               <h1 className="text-xl font-bold text-gray-900">7H Stock Analyzer</h1>
               {systemHealth && (
                 <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${

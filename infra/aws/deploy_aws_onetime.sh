@@ -166,3 +166,53 @@ rm -f stock-analyzer-layer.zip stock-analyzer-lambda.zip
 rm -rf layer package
 
 echo "✅ Deployment cleanup completed"
+
+# Setup weekly reconciliation monitoring
+echo ""
+echo "🔄 Setting up weekly reconciliation monitoring..."
+
+# Create S3 prefix for reconciliation data
+echo "📁 Creating reconciliation data structure..."
+aws s3api put-object \
+    --bucket "7h-stock-analyzer-${ENVIRONMENT}" \
+    --key "recon/.gitkeep" \
+    --content-type "application/octet-stream" \
+    --region $AWS_REGION || echo "ℹ️  Recon directory already exists"
+
+# Test reconciliation endpoint
+echo "🧪 Testing reconciliation endpoint..."
+API_URL=$(aws cloudformation describe-stacks \
+    --stack-name "$STACK_NAME" \
+    --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' \
+    --output text)
+
+if [ -n "$API_URL" ]; then
+    echo "🌐 API URL: $API_URL"
+    
+    # Test recon endpoint (will show 0 initially, but confirms it works)
+    echo "📊 Testing reconciliation API..."
+    RECON_RESPONSE=$(curl -s -w "%{http_code}" "$API_URL/recon/summary" || echo "000")
+    
+    if [[ "$RECON_RESPONSE" == *"200"* ]]; then
+        echo "✅ Reconciliation API endpoint is working"
+    else
+        echo "⚠️  Reconciliation API test failed (expected for new deployment)"
+    fi
+    
+    echo ""
+    echo "📋 Weekly Reconciliation Details:"
+    echo "  🕐 Schedule: Every Sunday at 6:00 PM EST (23:00 UTC)"
+    echo "  📊 Data: Tracks profit targets vs stop losses"
+    echo "  📈 Metrics: Days to target, success rates, performance by type"
+    echo "  🔗 Endpoint: $API_URL/recon/summary"
+    echo "  🗂️  Storage: s3://7h-stock-analyzer-${ENVIRONMENT}/recon/daily/"
+    echo ""
+    echo "🎯 To view reconciliation data:"
+    echo "  curl -s $API_URL/recon/summary | jq ."
+    echo "  curl -s $API_URL/recon/daily/\$(date +%Y-%m-%d) | jq ."
+else
+    echo "⚠️  Could not get API URL - reconciliation may need manual testing"
+fi
+
+echo ""
+echo "✅ Weekly reconciliation setup completed!"

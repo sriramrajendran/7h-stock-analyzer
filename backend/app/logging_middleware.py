@@ -18,7 +18,9 @@ class CostOptimizedLoggingMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.exclude_paths = exclude_paths or [
             "/health",  # Exclude health checks from detailed logging
-            "/metrics"  # Exclude metrics endpoints
+            "/metrics",  # Exclude metrics endpoints
+            "/history/dates",  # Exclude frequently polled endpoints
+            "/config"  # Exclude config endpoints
         ]
     
     async def dispatch(self, request: Request, call_next: Callable) -> Response:

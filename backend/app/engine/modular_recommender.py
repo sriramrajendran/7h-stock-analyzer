@@ -154,9 +154,16 @@ class ModularStockAnalyzer:
     def _load_default_tickers(self) -> List[str]:
         """Load default tickers from configuration"""
         try:
-            # Try to load from S3 configuration
+            # Try to load from S3 configuration (portfolio first, then watchlist)
+            config_result = load_config_from_s3('portfolio')
+            if config_result.get('success') and config_result.get('symbols'):
+                logger.info(f"Loaded {len(config_result['symbols'])} tickers from portfolio config")
+                return config_result['symbols']
+            
+            # Fallback to watchlist
             config_result = load_config_from_s3('watchlist')
             if config_result.get('success') and config_result.get('symbols'):
+                logger.info(f"Loaded {len(config_result['symbols'])} tickers from watchlist config")
                 return config_result['symbols']
             
             # Fallback to default list

@@ -3,6 +3,7 @@ Reconciliation service for tracking recommendation performance
 """
 
 import boto3
+import os
 import json
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
@@ -47,49 +48,49 @@ class ReconService:
             logger.error(f"Daily recon failed: {str(e)}")
             return {'success': False, 'error': str(e)}
     
-    def _reconcile_recommendation(self, recommendation: Recommendation) -> ReconData:
+    def _reconcile_recommendation(self, recommendation: Dict) -> ReconData:
         """Reconcile a single recommendation with current market data"""
         try:
             # Get current market data
-            ticker = yf.Ticker(recommendation.symbol)
+            ticker = yf.Ticker(recommendation['symbol'])
             current_data = ticker.history(period="1d")
             
             if current_data.empty:
-                logger.warning(f"No current data for {recommendation.symbol}")
+                logger.warning(f"No current data for {recommendation['symbol']}")
                 return None
             
             current_price = current_data['Close'].iloc[-1]
             
             # Calculate days elapsed
-            original_date = datetime.fromisoformat(recommendation.timestamp.replace('Z', '+00:00'))
+            original_date = datetime.fromisoformat(recommendation['timestamp'].replace('Z', '+00:00'))
             days_elapsed = (datetime.utcnow() - original_date).days
             
             # Check if target or stop loss was hit
             target_met = False
             stop_loss_hit = False
             
-            if recommendation.target_price:
-                target_met = current_price >= recommendation.target_price
+            if recommendation.get('target_price'):
+                target_met = current_price >= recommendation['target_price']
             
-            if recommendation.stop_loss:
-                stop_loss_hit = current_price <= recommendation.stop_loss
+            if recommendation.get('stop_loss'):
+                stop_loss_hit = current_price <= recommendation['stop_loss']
             
             return ReconData(
-                symbol=recommendation.symbol,
-                original_recommendation=recommendation.recommendation,
-                original_price=recommendation.price,
-                target_price=recommendation.target_price,
-                stop_loss=recommendation.stop_loss,
+                symbol=recommendation['symbol'],
+                original_recommendation=recommendation['recommendation'],
+                original_price=recommendation['price'],
+                target_price=recommendation.get('target_price'),
+                stop_loss=recommendation.get('stop_loss'),
                 current_price=current_price,
                 days_elapsed=days_elapsed,
                 target_met=target_met,
                 stop_loss_hit=stop_loss_hit,
                 recon_date=datetime.utcnow().isoformat(),
-                original_timestamp=recommendation.timestamp
+                original_timestamp=recommendation['timestamp']
             )
             
         except Exception as e:
-            logger.error(f"Error reconciling {recommendation.symbol}: {str(e)}")
+            logger.error(f"Error reconciling {recommendation['symbol']}: {str(e)}")
             return None
     
     def _get_latest_recommendations(self) -> Dict[str, Any]:
@@ -115,7 +116,7 @@ class ReconService:
                 'date': today,
                 'timestamp': datetime.utcnow().isoformat(),
                 'count': len(recon_results),
-                'reconciliations': [recon.dict() for recon in recon_results]
+                'reconciliations': [recon.__dict__ for recon in recon_results]
             }
             
             self.s3_client.put_object(

@@ -28,5 +28,12 @@ urllib3==2.2.2
 six==1.16.0
 certifi==2024.2.2
 
+# Testing dependencies
+pytest==7.4.3
+pytest-cov==4.1.0
+pytest-mock==3.12.0
+pytest-asyncio==0.21.1
+pytest-xdist==3.3.1
+
 # Note: pydantic removed temporarily to avoid compilation issues
 # Will add back after basic setup works

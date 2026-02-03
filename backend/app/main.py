@@ -73,6 +73,47 @@ app.add_middleware(CostOptimizedLoggingMiddleware)
 app.add_middleware(StructuredErrorLoggingMiddleware)
 
 
+@app.get("/recon/summary")
+def get_recon_summary(auth: bool = verify_api_key):
+    """Get reconciliation summary showing profit/stop loss performance"""
+    try:
+        from app.services.recon_service import ReconService
+        recon_service = ReconService()
+        summary = recon_service.get_recon_summary(days=30)
+        return summary
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get recon summary: {str(e)}")
+
+
+@app.get("/recon/daily/{date}")
+def get_daily_recon(date: str, auth: bool = verify_api_key):
+    """Get daily reconciliation data for specific date (YYYY-MM-DD)"""
+    try:
+        from app.services.recon_service import ReconService
+        recon_service = ReconService()
+        
+        # Get specific daily recon file
+        recon_key = f'recon/daily/{date}.json'
+        response = recon_service.s3_client.get_object(
+            Bucket=recon_service.bucket_name,
+            Key=recon_key
+        )
+        return json.loads(response['Body'].read().decode('utf-8'))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get daily recon: {str(e)}")
+
+
+@app.post("/recon/run")
+def run_reconciliation(auth: bool = verify_api_key):
+    """Manual trigger for daily reconciliation"""
+    try:
+        from app.services.recon_service import run_daily_reconciliation
+        result = run_daily_reconciliation()
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to run reconciliation: {str(e)}")
+
+
 @app.get("/health")
 def health_check():
     """Health check endpoint - optimized for minimal cost"""
@@ -222,23 +263,44 @@ def handler(event, context):
         if event.get("source") == "aws.events":
             logger.info("EventBridge cron trigger detected", trigger_type="cron")
             
-            # Run the modular recommendation engine
-            recommendations = run_modular_analysis()
-            
-            # Persist results to S3
-            persist_results(recommendations)
-            
-            # Send Pushover notification
-            send_push_notification(recommendations)
-            
-            return {
-                "statusCode": 200,
-                "body": json.dumps({
-                    "status": "cron executed",
-                    "count": len(recommendations),
-                    "timestamp": datetime.utcnow().isoformat()
-                })
-            }
+            # Check if this is the weekly reconciliation trigger
+            resources = event.get("resources", [])
+            if any("StockAnalyzerWeeklyRecon" in resource for resource in resources):
+                logger.info("Weekly reconciliation trigger detected")
+                
+                # Run reconciliation
+                from app.services.recon_service import run_daily_reconciliation
+                recon_result = run_daily_reconciliation()
+                
+                return {
+                    "statusCode": 200,
+                    "body": json.dumps({
+                        "status": "weekly reconciliation executed",
+                        "reconciled_count": recon_result.get("reconciled_count", 0),
+                        "timestamp": datetime.utcnow().isoformat()
+                    })
+                }
+            else:
+                # Regular stock analysis trigger
+                logger.info("Stock analysis trigger detected")
+                
+                # Run the modular recommendation engine
+                recommendations = run_modular_analysis()
+                
+                # Persist results to S3
+                persist_results(recommendations)
+                
+                # Send Pushover notification
+                send_push_notification(recommendations)
+                
+                return {
+                    "statusCode": 200,
+                    "body": json.dumps({
+                        "status": "stock analysis executed",
+                        "count": len(recommendations),
+                        "timestamp": datetime.utcnow().isoformat()
+                    })
+                }
         
         # Handle API Gateway requests
         else:

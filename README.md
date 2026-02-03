@@ -14,7 +14,61 @@ A comprehensive, modular stock analysis system built with serverless architectur
 - **Cost Optimized**: < $15/month estimated cost
 - **Real-time Notifications**: Pushover integration for significant recommendations
 
-## 📊 Architecture
+## � Automated Scheduling
+
+### AWS Lambda Triggers
+- **Market Open**: 30 minutes after market open (10:00 AM EST)
+- **Midday**: 12:30 PM EST trading update
+- **Weekly Reconciliation**: Sunday 6:00 PM EST (profit/stop loss tracking)
+
+### Local Development
+```bash
+# Manual reconciliation (for testing)
+curl -X POST http://localhost:8000/recon/run
+
+# View performance summary
+curl http://localhost:8000/recon/summary
+```
+
+### AWS Deployment
+```bash
+# Weekly reconciliation is automatically configured during deployment
+./infra/aws/deploy_aws_onetime.sh
+
+# Manual reconciliation trigger
+curl -X POST https://your-api-gateway-url/recon/run
+```
+
+## 🧪 Testing & Quality Assurance
+
+### Comprehensive Test Suite
+```bash
+# Run all tests with coverage
+./infra/local/run_tests.sh
+
+# Run specific test categories
+python -m pytest backend/tests/test_recommendation_engine.py -v  # Target prices & risk/reward
+python -m pytest backend/tests/test_signal_engine.py -v         # Technical indicators
+python -m pytest backend/tests/test_reconciliation_service.py -v # Performance tracking
+python -m pytest backend/tests/test_api_endpoints.py -v         # API integrity
+```
+
+### Test Coverage Areas
+- ✅ **Target Price Calculations**: Ensures profit targets are accurate
+- ✅ **Risk/Reward Ratios**: Validates favorable risk vs reward
+- ✅ **Signal Generation**: Tests technical indicator logic
+- ✅ **Reconciliation Tracking**: Verifies performance calculations
+- ✅ **API Security**: Tests authentication and data structures
+- ✅ **Error Handling**: Ensures robust error management
+
+### Integrity Guarantees
+- 🎯 **Target Prices**: 20% (Strong Buy), 10% (Buy), 2% (Hold) - always verified
+- 🛡️ **Risk Management**: Stop losses always smaller than profit targets
+- 📊 **Signal Accuracy**: Technical indicators generate consistent signals
+- 🔄 **Performance Tracking**: Days to target and success rates are precise
+- 🔒 **API Security**: All endpoints require proper authentication
+
+## 📊 Performance Tracking
 
 ```
 [Tickers] → [Data Loader] → [S3 Cache] → [Indicator Engine] → [Signal Engine] → [Recommendation Engine] → [Output]
@@ -37,7 +91,6 @@ A comprehensive, modular stock analysis system built with serverless architectur
 - SAM CLI (for deployment)
 
 ### Local Development
-
 1. **Setup Environment**
    ```bash
    ./infra/local/setup_local_onetime.sh
@@ -48,15 +101,30 @@ A comprehensive, modular stock analysis system built with serverless architectur
    ./infra/local/start_local.sh
    ```
 
-3. **Test Setup**
+3. **Run Tests**
+   ```bash
+   ./infra/local/run_tests.sh
+   ```
+
+4. **Test Setup**
    ```bash
    ./infra/local/test_local.sh
    ```
 
-4. **Access Applications**
-   - Frontend: http://localhost:3000
-   - API Docs: http://localhost:8000/docs
-   - API Health: http://localhost:8000/health
+5. **Manual reconciliation (for testing)**
+   ```bash
+   curl -X POST http://localhost:8000/recon/run
+   ```
+
+6. **View performance summary**
+   ```bash
+   curl http://localhost:8000/recon/summary
+   ```
+
+### Access Applications
+- Frontend: http://localhost:3000
+- API Docs: http://localhost:8000/docs
+- API Health: http://localhost:8000/health
 
 ### AWS Deployment
 

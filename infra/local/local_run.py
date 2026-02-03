@@ -8,10 +8,10 @@ import json
 from datetime import datetime
 
 # Add the app directory to Python path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'app'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend', 'app'))
 
 from app.main import handler
-from app.engine.recommender import run_engine
+from app.engine.modular_recommender import run_modular_analysis
 from app.services.s3_store import persist_results, get_latest_results
 from app.services.pushover import send_push_notification, validate_pushover_config
 
@@ -121,7 +121,7 @@ def test_engine_directly():
     print("=" * 60)
     
     try:
-        recommendations = run_engine()
+        recommendations = run_modular_analysis()
         print(f"✅ Engine test successful - Found {len(recommendations)} recommendations")
         
         if recommendations:

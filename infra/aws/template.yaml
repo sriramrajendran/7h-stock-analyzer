@@ -139,6 +139,20 @@ Resources:
               MaximumEventAgeInSeconds: 1800  # Reduced from 3600
             # Reserved concurrency to control costs and prevent runaway execution
             ReservedConcurrentExecutions: 1
+        # EventBridge Cron Trigger 3 - Weekly reconciliation (Sunday 6:00 PM EST = 23:00 UTC)
+        CronTriggerWeeklyRecon:
+          Type: Schedule
+          Properties:
+            Schedule: cron(0 23 ? * SUN *)
+            Name: StockAnalyzerWeeklyRecon
+            Description: Trigger weekly reconciliation for performance tracking
+            Enabled: true
+            # Enhanced retry policy with limited attempts
+            RetryPolicy:
+              MaximumRetryAttempts: 2
+              MaximumEventAgeInSeconds: 3600
+            # Reserved concurrency to control costs and prevent runaway execution
+            ReservedConcurrentExecutions: 1
 
   # Dependencies Layer for shared libraries
   DependenciesLayer:

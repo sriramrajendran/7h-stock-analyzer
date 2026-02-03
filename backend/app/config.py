@@ -63,7 +63,8 @@ ENABLE_VERBOSE_LOGGING = os.getenv('ENABLE_VERBOSE_LOGGING', 'false').lower() ==
 ENVIRONMENT = os.getenv('ENVIRONMENT', 'dev')
 
 # Cost-optimized logging settings
-PRODUCTION_LOG_LEVEL = 'WARNING'  # Only WARNING and above in production
+# AWS Lambda defaults to WARNING level, localhost defaults to INFO
+DEFAULT_LOG_LEVEL = 'WARNING' if os.getenv('AWS_LAMBDA_FUNCTION_NAME') else 'INFO'
 LOG_RETENTION_DAYS = int(os.getenv('LOG_RETENTION_DAYS', '7'))
 ENABLE_STRUCTURED_LOGGING = os.getenv('ENABLE_STRUCTURED_LOGGING', 'true').lower() == 'true'
 

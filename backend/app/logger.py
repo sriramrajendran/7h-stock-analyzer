@@ -20,8 +20,14 @@ class CostOptimizedLogger:
         if self.logger.handlers:
             return
             
-        # Set log level from environment
-        log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
+        # Auto-detect environment and set appropriate log level
+        if os.getenv('AWS_LAMBDA_FUNCTION_NAME'):
+            # AWS Lambda environment - use WARNING to minimize costs
+            log_level = os.getenv('LOG_LEVEL', 'WARNING').upper()
+        else:
+            # Local development - use INFO for better debugging
+            log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
+            
         self.logger.setLevel(getattr(logging, log_level))
         
         # Create cost-optimized formatter
@@ -37,8 +43,8 @@ class CostOptimizedLogger:
         
     def _should_log(self, level: str) -> bool:
         """Check if message should be logged based on environment and level"""
-        # In production, only log WARNING and above unless explicitly enabled
-        if os.getenv('ENVIRONMENT') == 'prod' and level in ['DEBUG', 'INFO']:
+        # In AWS Lambda, only log WARNING and above unless explicitly enabled
+        if os.getenv('AWS_LAMBDA_FUNCTION_NAME') and level in ['DEBUG', 'INFO']:
             return os.getenv('ENABLE_VERBOSE_LOGGING', 'false').lower() == 'true'
         return True
         
