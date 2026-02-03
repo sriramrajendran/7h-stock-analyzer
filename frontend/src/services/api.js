@@ -7,12 +7,34 @@ const S3_REGION = import.meta.env.REACT_APP_S3_REGION || 'us-east-1'
 // Check if we're in development mode
 const isDevelopment = import.meta.env.MODE === 'development'
 
+// Get API key from localStorage or parent component
+let currentApiKey = localStorage.getItem('stockAnalyzerApiKey') || ''
+
+export const setApiKey = (key) => {
+  currentApiKey = key
+}
+
+// Helper function to add API key to headers
+const getHeaders = () => {
+  const headers = {
+    'Content-Type': 'application/json'
+  }
+  
+  if (currentApiKey) {
+    headers['X-API-Key'] = currentApiKey
+  }
+  
+  return headers
+}
+
 // S3 API - Direct S3 access for static data
 export const s3Api = {
   getLatestRecommendations: async () => {
     if (isDevelopment) {
       // Use local API for development
-      const response = await fetch(`${API_BASE_URL}/recommendations`)
+      const response = await fetch(`${API_BASE_URL}/recommendations`, {
+        headers: getHeaders()
+      })
       if (!response.ok) {
         throw new Error('Failed to fetch latest recommendations')
       }
@@ -29,7 +51,9 @@ export const s3Api = {
   getHistoricalRecommendations: async (date) => {
     if (isDevelopment) {
       // Use local API for development
-      const response = await fetch(`${API_BASE_URL}/history/${date}`)
+      const response = await fetch(`${API_BASE_URL}/history/${date}`, {
+        headers: getHeaders()
+      })
       if (!response.ok) {
         throw new Error('Failed to fetch historical recommendations')
       }
@@ -46,7 +70,9 @@ export const s3Api = {
   listAvailableDates: async () => {
     // This would require a Lambda function to list S3 objects
     // For now, return a mock implementation
-    const response = await fetch(`${API_BASE_URL}/history/dates`)
+    const response = await fetch(`${API_BASE_URL}/history/dates`, {
+      headers: getHeaders()
+    })
     if (!response.ok) {
       throw new Error('Failed to fetch available dates')
     }
@@ -59,9 +85,7 @@ export const lambdaApi = {
   triggerManualRun: async () => {
     const response = await fetch(`${API_BASE_URL}/run-now`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      }
+      headers: getHeaders()
     })
     if (!response.ok) {
       throw new Error('Failed to trigger manual run')
@@ -70,7 +94,9 @@ export const lambdaApi = {
   },
 
   healthCheck: async () => {
-    const response = await fetch(`${API_BASE_URL}/health`)
+    const response = await fetch(`${API_BASE_URL}/health`, {
+      headers: getHeaders()
+    })
     if (!response.ok) {
       throw new Error('Health check failed')
     }
@@ -79,7 +105,9 @@ export const lambdaApi = {
 
   // Configuration management
   getConfig: async (configType) => {
-    const response = await fetch(`${API_BASE_URL}/config/${configType}`)
+    const response = await fetch(`${API_BASE_URL}/config/${configType}`, {
+      headers: getHeaders()
+    })
     if (!response.ok) {
       throw new Error('Failed to fetch configuration')
     }
@@ -87,7 +115,9 @@ export const lambdaApi = {
   },
 
   getAllConfigs: async () => {
-    const response = await fetch(`${API_BASE_URL}/config`)
+    const response = await fetch(`${API_BASE_URL}/config`, {
+      headers: getHeaders()
+    })
     if (!response.ok) {
       throw new Error('Failed to fetch all configurations')
     }
@@ -97,9 +127,7 @@ export const lambdaApi = {
   updateConfig: async (configType, symbols, backup = true) => {
     const response = await fetch(`${API_BASE_URL}/config/update`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: getHeaders(),
       body: JSON.stringify({
         config_type: configType,
         symbols: symbols,
@@ -115,9 +143,7 @@ export const lambdaApi = {
   validateSymbols: async (symbols) => {
     const response = await fetch(`${API_BASE_URL}/config/validate`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: getHeaders(),
       body: JSON.stringify({
         symbols: symbols
       })
@@ -131,9 +157,7 @@ export const lambdaApi = {
   syncConfigs: async () => {
     const response = await fetch(`${API_BASE_URL}/config/sync`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      }
+      headers: getHeaders()
     })
     if (!response.ok) {
       throw new Error('Failed to sync configurations')
@@ -152,7 +176,8 @@ export const api = {
   getAllConfigs: lambdaApi.getAllConfigs,
   updateConfig: lambdaApi.updateConfig,
   validateSymbols: lambdaApi.validateSymbols,
-  syncConfigs: lambdaApi.syncConfigs
+  syncConfigs: lambdaApi.syncConfigs,
+  setApiKey: setApiKey
 }
 
 // Utility functions

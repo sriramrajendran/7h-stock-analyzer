@@ -1,40 +1,42 @@
 """
-Pydantic models for the Stock Recommendation Engine
+Data models for the Stock Recommendation Engine
 """
 
-from pydantic import BaseModel, Field
+from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 
-class Recommendation(BaseModel):
+@dataclass
+class Recommendation:
     """Enhanced stock recommendation model"""
-    symbol: str = Field(..., description="Stock ticker symbol")
-    company: str = Field(..., description="Company name")
-    price: float = Field(..., description="Current stock price")
-    change_pct: float = Field(..., description="Price change percentage")
-    rsi: float = Field(..., description="RSI indicator value")
-    macd: float = Field(..., description="MACD indicator value")
-    sma_20: float = Field(..., description="20-day SMA")
-    sma_50: float = Field(..., description="50-day SMA")
-    recommendation: str = Field(..., description="Recommendation type")
-    score: float = Field(..., description="Recommendation score")
-    reasoning: str = Field(..., description="Recommendation reasoning")
-    fundamental: Dict[str, Any] = Field(default_factory=dict, description="Fundamental data")
-    timestamp: str = Field(..., description="Analysis timestamp")
+    symbol: str
+    company: str
+    price: float
+    change_pct: float
+    rsi: float
+    macd: float
+    sma_20: float
+    sma_50: float
+    recommendation: str
+    score: float = 0.0
+    reasoning: str = ""
+    fundamental: Dict[str, Any] = None
+    timestamp: str = ""
     
     # Enhanced fields for spec_lambda_enhance.md
-    target_price: Optional[float] = Field(None, description="Target price based on recommendation type")
-    stop_loss: Optional[float] = Field(None, description="Stop loss price for risk management")
-    confidence_level: Optional[str] = Field(None, description="Confidence level (High/Medium/Low)")
-    technical_indicators: List[str] = Field(default_factory=list, description="Technical indicators used")
-    price_chart_url: Optional[str] = Field(None, description="URL to price chart image")
-    days_to_target: Optional[int] = Field(None, description="Days taken to reach target (recon data)")
-    target_met: Optional[bool] = Field(None, description="Whether target price was met (recon data)")
-    stop_loss_hit: Optional[bool] = Field(None, description="Whether stop loss was hit (recon data)")
+    target_price: Optional[float] = None
+    stop_loss: Optional[float] = None
+    confidence_level: Optional[str] = None
+    technical_indicators: List[str] = None
+    price_chart_url: Optional[str] = None
+    days_to_target: Optional[int] = None
+    target_met: Optional[bool] = None
+    stop_loss_hit: Optional[bool] = None
 
 
-class AnalysisResponse(BaseModel):
+@dataclass
+class AnalysisResponse:
     """Response model for stock analysis"""
     success: bool
     recommendations: List[Recommendation]
@@ -42,14 +44,16 @@ class AnalysisResponse(BaseModel):
     count: int
 
 
-class ErrorResponse(BaseModel):
+@dataclass
+class ErrorResponse:
     """Error response model"""
     error: str
     timestamp: str
     details: Optional[Dict[str, Any]] = None
 
 
-class HealthResponse(BaseModel):
+@dataclass
+class HealthResponse:
     """Health check response model"""
     status: str
     timestamp: str
@@ -57,14 +61,16 @@ class HealthResponse(BaseModel):
     region: Optional[str] = None
 
 
-class RunNowResponse(BaseModel):
+@dataclass
+class RunNowResponse:
     """Manual run response model"""
     status: str
     recommendations: int
     timestamp: str
 
 
-class HistoricalData(BaseModel):
+@dataclass
+class HistoricalData:
     """Historical recommendations data model"""
     timestamp: str
     date: str
@@ -72,7 +78,8 @@ class HistoricalData(BaseModel):
     recommendations: List[Recommendation]
 
 
-class LatestData(BaseModel):
+@dataclass
+class LatestData:
     """Latest recommendations data model"""
     timestamp: str
     date: str
@@ -80,7 +87,8 @@ class LatestData(BaseModel):
     recommendations: List[Recommendation]
 
 
-class SummaryStats(BaseModel):
+@dataclass
+class SummaryStats:
     """Summary statistics model"""
     total_days_with_data: int
     latest_recommendations: int
@@ -89,13 +97,14 @@ class SummaryStats(BaseModel):
     available_dates: List[str]
 
 
-class RecommendationsSummary(BaseModel):
+class RecommendationsSummary:
     """Recommendations summary response model"""
     summary: SummaryStats
     latest_data: LatestData
 
 
-class NotificationConfig(BaseModel):
+@dataclass
+class NotificationConfig:
     """Notification configuration model"""
     token_configured: bool
     user_configured: bool
@@ -103,7 +112,8 @@ class NotificationConfig(BaseModel):
     test_successful: bool
 
 
-class ConfigValidation(BaseModel):
+@dataclass
+class ConfigValidation:
     """Configuration validation model"""
     s3_configured: bool
     pushover_configured: bool
@@ -112,7 +122,8 @@ class ConfigValidation(BaseModel):
     environment: str
 
 
-class ReconData(BaseModel):
+@dataclass
+class ReconData:
     """Reconciliation data for recommendations"""
     symbol: str
     original_recommendation: str
@@ -127,19 +138,22 @@ class ReconData(BaseModel):
     original_timestamp: str
 
 
-class ConfigUpdateRequest(BaseModel):
+@dataclass
+class ConfigUpdateRequest:
     """Configuration update request model"""
     config_type: str
     symbols: List[str]
     backup: bool = True
 
 
-class ConfigValidationRequest(BaseModel):
+@dataclass
+class ConfigValidationRequest:
     """Symbol validation request model"""
     symbols: List[str]
 
 
-class PurgeRequest(BaseModel):
+@dataclass
+class PurgeRequest:
     """Purge old recommendations request model"""
-    days_threshold: int = Field(default=1000, description="Days after which to purge recommendations")
-    dry_run: bool = Field(default=True, description="Run in dry-run mode without actual deletion")
+    days_threshold: int = 1000
+    dry_run: bool = True

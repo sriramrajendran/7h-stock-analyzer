@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import Dashboard from './pages/Dashboard'
 import History from './pages/History'
 import Config from './pages/Config'
+import ApiKeyModal from './components/ApiKeyModal'
 import { api } from './services/api'
 
 function App() {
@@ -11,17 +12,37 @@ function App() {
   const [error, setError] = useState(null)
   const [lastUpdated, setLastUpdated] = useState(null)
   const [systemHealth, setSystemHealth] = useState(null)
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false)
+  const [hasApiKey, setHasApiKey] = useState(false)
 
   useEffect(() => {
-    fetchLatestRecommendations()
-    fetchSystemHealth()
-    // Auto-refresh every 5 minutes
-    const interval = setInterval(() => {
+    // Check if API key exists on mount
+    const savedKey = localStorage.getItem('stockAnalyzerApiKey')
+    if (savedKey) {
+      setHasApiKey(true)
+      api.setApiKey(savedKey)
+    } else {
+      setShowApiKeyModal(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (hasApiKey) {
       fetchLatestRecommendations()
       fetchSystemHealth()
-    }, 300000)
-    return () => clearInterval(interval)
-  }, [])
+    }
+    // Auto-refresh recommendations every 5 minutes, health check every 10 minutes
+    const recommendationsInterval = hasApiKey ? setInterval(() => {
+      fetchLatestRecommendations()
+    }, 300000) : null
+    const healthInterval = hasApiKey ? setInterval(() => {
+      fetchSystemHealth()
+    }, 600000) : null
+    return () => {
+      if (recommendationsInterval) clearInterval(recommendationsInterval)
+      if (healthInterval) clearInterval(healthInterval)
+    }
+  }, [hasApiKey])
 
   const fetchLatestRecommendations = async () => {
     try {
@@ -38,12 +59,34 @@ function App() {
   }
 
   const fetchSystemHealth = async () => {
+    // Cache health check for 2 minutes to reduce API calls
+    const now = Date.now()
+    const lastHealthCheck = localStorage.getItem('lastHealthCheck')
+    const cachedHealth = localStorage.getItem('cachedHealth')
+    
+    if (lastHealthCheck && cachedHealth && (now - parseInt(lastHealthCheck)) < 120000) {
+      setSystemHealth(JSON.parse(cachedHealth))
+      return
+    }
+    
     try {
       const health = await api.getHealth()
       setSystemHealth(health)
+      localStorage.setItem('cachedHealth', JSON.stringify(health))
+      localStorage.setItem('lastHealthCheck', now.toString())
     } catch (err) {
       console.error('Failed to fetch system health:', err)
+      // Use cached health if available, even if expired
+      if (cachedHealth) {
+        setSystemHealth(JSON.parse(cachedHealth))
+      }
     }
+  }
+
+  const handleApiKeySet = (apiKey) => {
+    api.setApiKey(apiKey)
+    setHasApiKey(true)
+    setShowApiKeyModal(false)
   }
 
   const triggerManualRun = async () => {
@@ -111,6 +154,12 @@ function App() {
               >
                 Configuration
               </button>
+              <button
+                onClick={() => setShowApiKeyModal(true)}
+                className="inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              >
+                🔑 API Key
+              </button>
             </div>
           </div>
           <div className="flex items-center space-x-4">
@@ -133,6 +182,27 @@ function App() {
   )
 
   const renderContent = () => {
+    if (!hasApiKey) {
+      return (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="bg-yellow-50 border border-yellow-200 rounded-md p-6">
+            <div className="text-yellow-800">
+              <h3 className="text-lg font-medium mb-2">API Key Required</h3>
+              <p className="mb-4">
+                Please set your API key to access the stock analyzer features.
+              </p>
+              <button
+                onClick={() => setShowApiKeyModal(true)}
+                className="btn btn-primary"
+              >
+                Set API Key
+              </button>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
     if (error) {
       return (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -175,6 +245,11 @@ function App() {
     <div className="min-h-screen bg-gray-50">
       {renderNavigation()}
       {renderContent()}
+      <ApiKeyModal
+        isOpen={showApiKeyModal}
+        onClose={() => setShowApiKeyModal(false)}
+        onApiKeySet={handleApiKeySet}
+      />
     </div>
   )
 }

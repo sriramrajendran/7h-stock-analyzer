@@ -1,487 +1,210 @@
-# 🚀 7H Stock Analyzer - Enhanced Serverless Lambda Version
+# 7H Stock Analyzer
 
-A comprehensive serverless stock analysis system built with AWS Lambda, EventBridge, S3, and React. This enhanced version provides automated daily stock recommendations with advanced features including target prices, stop losses, confidence levels, reconciliation tracking, and complete monitoring.
+A comprehensive, modular stock analysis system built with serverless architecture. Features automated technical analysis, recommendation engine, and real-time notifications.
 
-## 🏗️ Enhanced Architecture
+## 🚀 Features
 
-```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│  EventBridge    │───▶│   AWS Lambda     │───▶│   S3 Storage    │
-│   Cron Trigger  │    │ Enhanced Engine  │    │  (JSON + UI)    │
-└─────────────────┘    │  (FastAPI + TA)  │    └─────────────────┘
-                                │
-                                ▼
-                       ┌──────────────────┐
-                       │  Pushover API    │
-                       │  Smart Alerts    │
-                       └──────────────────┘
-                                │
-                                ▼
-                       ┌──────────────────┐
-                       │  Recon Service   │
-                       │  Performance     │
-                       │  Tracking        │
-                       └──────────────────┘
-```
+- **Modular Architecture**: Data Loader → Indicator Engine → Signal Engine → Recommendation Engine
+- **Technical Analysis**: 15+ indicators (RSI, MACD, Bollinger Bands, ADX, etc.)
+- **Smart Recommendations**: 5-tier system (Strong Buy → Strong Sell) with target prices
+- **S3 Caching**: Parquet-based caching for performance and cost optimization
+- **Serverless**: AWS Lambda + API Gateway + EventBridge
+- **Cost Optimized**: < $15/month estimated cost
+- **Real-time Notifications**: Pushover integration for significant recommendations
 
-## 🌟 Enhanced Features
-
-### Backend (Enhanced Lambda)
-- **Automated Analysis**: Daily cron triggers at market open (9:30 AM EST weekdays)
-- **Manual Triggers**: `/run-now` API endpoint for on-demand analysis
-- **Enhanced Technical Analysis**: RSI, MACD, Moving Averages, Bollinger Bands, Stochastic, ATR, OBV
-- **Target Price System**: Automatic calculation of target and stop-loss prices based on recommendation strength
-- **Confidence Levels**: High/Medium/Low confidence scoring with detailed reasoning
-- **Technical Indicators Tracking**: List all indicators used for each recommendation
-- **Reconciliation Service**: Daily tracking of target/stop-loss achievement with performance metrics
-- **Purge Service**: Automatic cleanup of old data (1000+ days) with dry-run capability
-- **Enhanced Configuration**: Full CRUD operations with validation, backup, and history
-- **Smart Notifications**: Target/stop-loss alerts with priority levels and detailed information
-- **Security Service**: API key management, access control, and request validation
-- **Chart Generation**: Automatic price chart generation for each recommendation
-- **Performance Analytics**: Detailed tracking of recommendation performance over time
-
-### Frontend (Enhanced React)
-- **Modern UI**: Built with React 18, Tailwind CSS, and responsive design
-- **Real-time Dashboard**: Latest recommendations with enhanced details, charts, and performance tracking
-- **Advanced Filtering**: Filter by confidence level, recommendation type, technical indicators
-- **Historical Analysis**: View past recommendations with recon data and performance metrics
-- **Configuration UI**: Manage stock symbols with validation, backup, and history tracking
-- **System Health**: Real-time system status and health monitoring
-- **Performance Summary**: Detailed analytics and recommendation distribution
-- **Chart Integration**: Interactive price charts with technical overlays
-- **Recon Dashboard**: View target/stop-loss achievements and performance analytics
-
-### Storage (Enhanced S3)
-- **Latest Data**: `data/latest.json` - Current recommendations with enhanced fields
-- **Historical Data**: `data/daily/YYYY-MM-DD.json` - Immutable daily snapshots
-- **Recon Data**: `recon/daily/YYYY-MM-DD.json` - Daily reconciliation tracking
-- **Chart Storage**: `charts/` - Generated price charts for recommendations
-- **Configuration**: `config/` - Stock lists with backup and versioning
-- **Security**: Enhanced bucket policies, encryption, and access controls
-- **Lifecycle Management**: Automatic cleanup and cost optimization
-- **Static Website**: Serves the React frontend with enhanced security
-
-## 📦 Project Structure
+## 📊 Architecture
 
 ```
-7h-stock-analyzer/
-├── backend/                    # Enhanced Lambda function code
-│   ├── app/
-│   │   ├── main.py            # FastAPI + Lambda handler
-│   │   ├── engine/
-│   │   │   └── enhanced_recommender.py # Enhanced technical analysis
-│   │   ├── services/
-│   │   │   ├── s3_store.py    # Enhanced S3 storage service
-│   │   │   ├── pushover.py    # Enhanced notification service
-│   │   │   ├── config_manager.py # Enhanced configuration management
-│   │   │   ├── recon_service.py # Reconciliation service
-│   │   │   ├── purge_service.py # Data cleanup service
-│   │   │   ├── chart_service.py # Chart generation service
-│   │   │   └── security_service.py # Security and API management
-│   │   ├── config.py          # Application configuration
-│   │   ├── models.py          # Enhanced Pydantic models
-│   │   └── __init__.py
-│   ├── requirements.txt       # Python dependencies
-│   └── local_run.py          # Local development runner
-├── frontend/                  # Enhanced React web application
-│   ├── src/
-│   │   ├── pages/            # Enhanced page components
-│   │   │   ├── Dashboard.jsx  # Enhanced dashboard with charts
-│   │   │   ├── History.jsx    # Historical analysis with recon data
-│   │   │   └── Config.jsx     # Enhanced configuration management
-│   │   ├── components/
-│   │   │   ├── RecommendationTable.jsx # Enhanced table
-│   │   │   ├── PriceChart.jsx # Chart component
-│   │   │   └── PerformanceSummary.jsx # Performance analytics
-│   │   ├── services/
-│   │   │   └── api.js        # Enhanced API service layer
-│   │   ├── App.jsx           # Enhanced main app component
-│   │   ├── main.jsx          # React entry point
-│   │   └── index.css         # Tailwind styles
-│   ├── package.json          # Node.js dependencies
-│   ├── vite.config.js        # Vite configuration
-│   └── tailwind.config.js    # Tailwind configuration
-├── infra/                     # Infrastructure and deployment
-│   ├── template.yaml         # AWS SAM infrastructure template
-│   ├── scripts/              # Deployment and build scripts
-│   │   ├── deploy.sh        # Main deployment script
-│   │   ├── build_layer.sh   # Lambda layer build script
-│   │   ├── build_package.sh # Lambda packaging script
-│   │   └── test_local.sh    # Local testing script
-│   └── env.example          # Environment variables template
-├── input/                    # Configuration files
-│   ├── config_portfolio.txt
-│   ├── config_watchlist.txt
-│   ├── config_us_stocks.txt
-│   └── config_etfs.txt
-├── doc/                      # Specifications
-│   ├── spec_lambda.md
-│   └── spec_lambda_enhance.md
-└── README.md                 # This file
+[Tickers] → [Data Loader] → [S3 Cache] → [Indicator Engine] → [Signal Engine] → [Recommendation Engine] → [Output]
 ```
 
-## 🚀 Quick Start
+### Core Modules
+
+- **Data Loader**: Yahoo Finance integration with batch processing and rate limiting
+- **Indicator Engine**: Comprehensive technical indicators (Trend, Momentum, Volatility, Volume)
+- **Signal Engine**: Weighted scoring system (Trend 40%, Momentum 30%, Volatility 20%, Volume 10%)
+- **Recommendation Engine**: BUY/HOLD/SELL with target prices and confidence levels
+
+## 🛠️ Quick Start
 
 ### Prerequisites
-- AWS CLI configured with appropriate permissions
-- SAM CLI installed (`pip install aws-sam-cli`)
-- Node.js 18+ and npm
+
+- AWS CLI configured
+- Node.js 16+
 - Python 3.10+
-- Pushover account (optional, for notifications)
+- SAM CLI (for deployment)
 
-### 1. Clone and Setup
+### Local Development
+
+1. **Setup Environment**
+   ```bash
+   ./infra/local/setup_local_onetime.sh
+   ```
+
+2. **Start Development Servers**
+   ```bash
+   ./infra/local/start_local.sh
+   ```
+
+3. **Test Setup**
+   ```bash
+   ./infra/local/test_local.sh
+   ```
+
+4. **Access Applications**
+   - Frontend: http://localhost:3000
+   - API Docs: http://localhost:8000/docs
+   - API Health: http://localhost:8000/health
+
+### AWS Deployment
+
+1. **Deploy Backend**
+   ```bash
+   ENVIRONMENT=dev ./infra/aws/deploy_aws_onetime.sh
+   ```
+
+2. **Deploy Frontend**
+   ```bash
+   ./infra/aws/deploy_frontend.sh dev
+   ```
+
+3. **Monitor Costs**
+   ```bash
+   ./infra/aws/monitor_costs.sh
+   ```
+
+## 📋 API Endpoints
+
+### Core Endpoints
+- `GET /health` - Health check
+- `POST /run-now` - Manual analysis trigger
+- `GET /recommendations` - Latest recommendations
+- `GET /history/{date}` - Historical data
+
+### Single Stock Analysis
+- `GET /analysis/{ticker}` - Analyze single stock
+- `GET /analysis/{ticker}/signals` - Get detailed signals
+- `GET /analysis/{ticker}/indicators` - Get technical indicators
+
+### Configuration Management
+- `GET /config/{type}` - Get configuration
+- `POST /config/update` - Update configuration
+- `POST /config/validate` - Validate symbols
+
+## 💰 Cost Optimization
+
+### Monthly Cost Breakdown (Estimated)
+- **Lambda**: ~$8 (100k invocations/month)
+- **S3**: ~$3 (storage + requests)
+- **API Gateway**: ~$4 (1M requests/month)
+- **CloudWatch Logs**: ~$4-6 (after optimization)
+- **Total**: < $20/month
+
+## 🔒 Simple API Security
+
+### Option 1: Static API Key (Simplest)
+Add this to your Lambda environment variables:
 ```bash
-git clone <repository>
-cd 7h-stock-analyzer
+API_KEY=your-secure-api-key-here
 ```
 
-### 2. Deploy Infrastructure
+Then use this simple middleware:
+```python
+# In main.py
+from fastapi import HTTPException, Header
 
-```bash
-# Deploy with AWS SAM (guided mode for first time)
-sam deploy --guided
+API_KEY = os.getenv('API_KEY')
 
-# Or use the quick deployment script
-chmod +x infra/scripts/deploy.sh
-./infra/scripts/deploy.sh
+def verify_api_key(x_api_key: str = Header(None)):
+    if not API_KEY or x_api_key != API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid API key")
+
+# Add to endpoints
+@app.get("/recommendations")
+def get_recommendations(api_key: str = Depends(verify_api_key)):
+    # Your code
 ```
 
-This will:
-- Build Lambda layer and package
-- Deploy CloudFormation stack
-- Configure all resources (Lambda, EventBridge, S3, API Gateway)
-- Set up monitoring and alarms
-- Output API endpoints and S3 bucket URL
-
-### 3. Configure Environment Variables
-
-Set these in the Lambda function console or via SAM parameters:
-- `PUSHOVER_TOKEN`: Your Pushover app token (optional)
-- `PUSHOVER_USER`: Your Pushover user key (optional)
-- `S3_BUCKET_NAME`: Your S3 bucket name (auto-configured)
-- `ENABLE_NOTIFICATIONS`: Set to "true" to enable Pushover alerts
-- `ALERT_EMAIL`: Email for CloudWatch alerts (optional)
-
-### 4. Configure and Deploy Frontend
-
+### Option 2: Environment-Based Security
 ```bash
-# Navigate to frontend
-cd frontend
+# Production: Require API key
+REQUIRE_AUTH=true
+API_KEY=your-production-api-key
 
-# Install dependencies
-npm install
-
-# Configure environment
-cp infra/env.example .env.local
-# Edit .env.local with your deployed values:
-# - REACT_APP_S3_BUCKET: From deployment output
-# - REACT_APP_API_BASE_URL: From deployment output  
-# - REACT_APP_S3_REGION: Your AWS region
-
-# Build for production
-npm run build
-
-# Upload to S3 (replace with your bucket name from deployment)
-aws s3 sync dist/ s3://your-bucket-name/ --delete
+# Development: No auth required
+REQUIRE_AUTH=false
 ```
 
-### 5. Test the Application
+### Option 3: IP Whitelist (Simple Network Security)
+Add to template.yaml:
+```yaml
+# In API Gateway CORS
+AllowOrigins:
+  - "https://yourdomain.com"  # Only your domain
+  - "https://your-static-site.s3.amazonaws.com"  # Your S3 UI
+```
 
-1. **Health Check**: `https://your-api-gateway-url.com/health`
-2. **Manual Run**: `POST https://your-api-gateway-url.com/run-now`
-3. **Web Interface**: `http://your-bucket-name.s3-website-us-east-1.amazonaws.com`
-4. **Test Notifications**: `POST https://your-api-gateway-url.com/notifications/test`
+### Recommended Setup: Static Key + CORS
+1. **Single API key** in environment variables
+2. **CORS restricted** to your S3 domain only
+3. **Simple header validation** in code
+
+**Frontend usage:**
+```javascript
+fetch('/api/recommendations', {
+  headers: { 'X-API-Key': 'your-static-key' }
+})
+```
+
+### Optimization Features
+- **Memory**: 512MB (auto-optimized based on execution time)
+- **Timeout**: 180s (reduced from 300s)
+- **Concurrency**: 2 (limited to control costs)
+- **S3 Lifecycle**: 30-90 day retention policies
+- **Log Retention**: 3 days (reduced from 7, cost-optimized)
+- **Structured Logging**: JSON format with environment-based filtering
+
+### Cost Management Commands
+```bash
+# Monitor current costs
+./infra/aws/monitor_costs.sh
+
+# Optimize resources
+./infra/aws/optimize_costs.sh
+
+# Clean up old data
+./infra/aws/optimize_costs.sh --cleanup
+```
 
 ## 🔧 Configuration
 
-### Stock Lists Management
+### Environment Variables
 
-Update stock symbols via API or edit files in `input/`:
-
+#### Local Development (.env.local)
 ```bash
-# Update portfolio via API
-curl -X POST https://your-api-gateway-url.com/config/update \
-  -H "Content-Type: application/json" \
-  -d '{
-    "config_type": "portfolio",
-    "symbols": ["AAPL", "MSFT", "GOOGL", "AMZN"],
-    "backup": true
-  }'
-
-# Get all configurations
-curl https://your-api-gateway-url.com/config
-
-# Validate symbols
-curl -X POST https://your-api-gateway-url.com/config/validate \
-  -H "Content-Type: application/json" \
-  -d '{"symbols": ["AAPL", "INVALID", "MSFT"]}'
-```
-
-### Pushover Notifications Setup (Optional)
-
-1. Create an app at [Pushover.net](https://pushover.net/)
-2. Get your app token and user key
-3. Set environment variables in Lambda function
-4. Enable notifications with `ENABLE_NOTIFICATIONS=true`
-
-### Cron Schedule
-
-Default: Weekdays at 9:30 AM EST (14:30 UTC)
-```yaml
-Schedule: cron(30 14 ? * MON-FRI *)
-```
-
-Modify in `infra/template.yaml` if needed.
-
-## 📊 Enhanced API Endpoints
-
-### Core Endpoints
-- `GET /health` - Enhanced health check with system status
-- `POST /run-now` - Trigger manual analysis with enhanced results
-- `GET /recommendations` - Get latest recommendations with enhanced fields
-- `GET /history/{date}` - Get historical data with recon information
-
-### Enhanced Configuration Endpoints
-- `GET /config/{type}` - Get configuration with metadata
-- `GET /config` - Get all configurations with summary
-- `POST /config/update` - Update configuration with validation and backup
-- `POST /config/validate` - Validate stock symbols with detailed feedback
-- `POST /config/sync` - Sync S3 configs to local files
-- `GET /config/history/{type}` - Get configuration change history
-
-### New Management Endpoints
-- `POST /recon/run` - Trigger manual reconciliation
-- `GET /recon/summary` - Get recon performance summary
-- `POST /purge/run` - Run data cleanup with dry-run option
-- `GET /purge/stats` - Get storage statistics
-- `POST /security/api-keys` - Generate new API key
-- `GET /security/api-keys` - List API keys
-- `POST /charts/generate` - Generate price charts
-
-### Notification Endpoints
-- `POST /notifications/test` - Test notification system
-- `POST /notifications/target-alert` - Send target achievement alert
-- `POST /notifications/stop-loss-alert` - Send stop loss alert
-- `GET /notifications/stats` - Get notification statistics
-
-## 🎯 Enhanced Recommendation Logic
-
-### Target Price Calculation
-- **Strong Buy**: Target +20%, Stop Loss -5%
-- **Buy**: Target +10%, Stop Loss -5%
-- **Hold**: Target 0%, Stop Loss -5%
-- **Sell**: Target -5%, Stop Loss +5%
-- **Strong Sell**: Target -20%, Stop Loss +5%
-
-### Confidence Level Calculation
-- **High**: Score ≥ 0.8 + indicator consistency ≥ 0.8
-- **Medium**: Score 0.6-0.8 + indicator consistency 0.6-0.8
-- **Low**: Score < 0.6 or indicator consistency < 0.6
-
-### Enhanced Scoring System
-- **RSI**: +2 (oversold <30), -2 (overbought >70), +1 (favorable), -1 (unfavorable)
-- **MACD**: +1 (bullish crossover), -1 (bearish crossover)
-- **Moving Averages**: +1 per MA above price (20, 50, 200-day)
-- **Price Momentum**: +0.5 (positive weekly/monthly change)
-- **Indicator Consistency**: Bonus for aligned signals
-- **Total Score**: Determines recommendation strength and confidence
-
-### Recommendation Types
-- **Score ≥ 0.7**: Strong Buy
-- **Score 0.3-0.7**: Buy
-- **Score -0.3 to 0.3**: Hold
-- **Score -0.7 to -0.3**: Sell
-- **Score ≤ -0.7**: Strong Sell
-
-### Technical Indicators Used
-- **RSI**: Momentum oscillator
-- **MACD**: Trend following indicator
-- **SMA (20, 50)**: Moving averages
-- **Bollinger Bands**: Volatility bands
-- **Volume SMA**: Volume analysis
-- **Price Action**: Current vs historical patterns
-
-## 💰 Enhanced Cost Estimate
-
-Monthly costs (typical usage with enhanced features):
-- **Lambda**: ~$0.08 (enhanced processing, 1024MB avg)
-- **EventBridge**: $0.00
-- **API Gateway**: ~$0.02 (enhanced endpoints)
-- **S3**: ~$0.08 (charts, recon data, enhanced storage)
-- **SNS**: ~$0.01 (enhanced alarms)
-- **CloudWatch**: ~$0.02 (enhanced monitoring)
-- **Pushover**: Depends on plan (free tier available)
-- **Total**: <$0.25/month
-
-### Cost Optimization Features
-- **Lifecycle Policies**: Automatic cleanup of old data
-- **Reserved Concurrency**: Control Lambda costs
-- **Data Compression**: Optimized JSON storage
-- **Smart Caching**: Reduce S3 requests
-- **Efficient Charts**: Optimized image generation
-
-## 🧪 Local Development
-
-### Backend Testing
-
-```bash
-cd backend
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Run all tests
-python local_run.py --test all
-
-# Run specific test
-python local_run.py --test engine
-python local_run.py --test s3
-python local_run.py --test pushover
-```
-
-### Frontend Development
-
-```bash
-cd frontend
-
-# Install dependencies
-npm install
-
-# Start development server
-npm run dev
-
-# Build for production
-npm run build
-
-# Preview build locally
-npm run preview
-```
-
-## 📈 Enhanced Monitoring and Logging
-
-### CloudWatch Integration
-- **Enhanced Lambda Logs**: Structured logging with correlation IDs
-- **Advanced Alarms**: Error rates, duration, costs, and performance metrics
-- **SNS Notifications**: Multi-channel alerts with filtering
-- **Custom Metrics**: Recommendation counts, confidence levels, recon performance
-- **Dashboard**: Pre-built CloudWatch dashboard for system overview
-
-### Enhanced Log Locations
-- Lambda: `/aws/lambda/stock-analyzer-function`
-- API Gateway: Enhanced request/response logging
-- S3: Access logs with detailed tracking
-- Recon: Separate log group for reconciliation tracking
-- Charts: Log group for chart generation metrics
-
-### Performance Monitoring
-- **Recommendation Accuracy**: Track target/stop-loss achievement
-- **System Performance**: Lambda duration and memory usage
-- **Data Quality**: Validation and error tracking
-- **User Analytics**: API usage patterns and popular features
-
-## 🔒 Enhanced Security
-
-- **IAM Roles**: Least privilege principle with enhanced policies
-- **S3 Security**: Bucket encryption, versioning, and access controls
-- **API Gateway**: Enhanced CORS, rate limiting, and request validation
-- **API Key Management**: Secure key generation and rotation
-- **Environment Variables**: Encrypted storage for sensitive data
-- **VPC Isolation**: Optional VPC deployment for enhanced security
-- **Data Encryption**: AES-256 encryption for all S3 data
-- **Access Logging**: Comprehensive audit trail
-- **Input Validation**: Sanitization and validation of all inputs
-
-## 🚨 Important Notes
-
-⚠️ **Disclaimer**: This tool is for educational purposes only. Stock recommendations are based on technical analysis and should not be considered financial advice. Always do your own research and consult with a financial advisor.
-
-- **Data Source**: Yahoo Finance (free, rate-limited)
-- **Analysis**: Technical indicators only (no fundamental analysis)
-- **Recommendations**: Use as one input among many for investment decisions
-- **Market Hours**: Analysis runs during market hours for best data quality
-
-## 🔄 Updates and Maintenance
-
-### Updating Stock Lists
-1. Use the Configuration UI in the web app
-2. Update files in `input/` and sync via `/config/sync` endpoint
-3. Call `/config/update` endpoint directly
-
-### Updating Lambda Code
-```bash
-# Build and deploy
-sam build
-sam deploy
-```
-
-### Updating Frontend
-```bash
-cd frontend
-npm run build
-aws s3 sync dist/ s3://your-bucket-name/ --delete
-```
-
-## �️ Detailed Deployment Options
-
-### Manual Deployment Steps
-
-#### Build Lambda Layer
-```bash
-./infra/scripts/build_layer.sh
-```
-
-#### Build Lambda Package
-```bash
-./infra/scripts/build_package.sh
-```
-
-#### Deploy with SAM (Advanced)
-```bash
-sam deploy \
-    --template-file infra/template.yaml \
-    --stack-name 7h-stock-analyzer \
-    --region us-east-1 \
-    --parameter-overrides \
-        Environment=prod \
-        EnableVpc=false \
-    --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
-    --no-confirm-changeset
-```
-
-### Environment Configuration
-
-#### Backend Environment Variables
-```bash
-# Required
 AWS_REGION=us-east-1
-S3_BUCKET_NAME=your-bucket-name
-
-# Optional (Notifications)
-PUSHOVER_TOKEN=your_app_token
+S3_BUCKET=7h-stock-analyzer-dev
+PUSHOVER_TOKEN=your_token
 PUSHOVER_USER=your_user_key
-ENABLE_NOTIFICATIONS=true
-ALERT_EMAIL=alerts@example.com
-
-# Performance
-DEFAULT_PERIOD=6mo
-BATCH_SIZE=50
-MAX_RETRIES=3
-REQUEST_TIMEOUT=30
+ENABLE_NOTIFICATIONS=false
+LOG_LEVEL=INFO
+ENABLE_VERBOSE_LOGGING=true
+ENVIRONMENT=dev
 ```
 
-#### Frontend Environment Variables (.env.local)
+#### Production (via SAM parameters)
 ```bash
-# Copy from infrastructure template
-cp infra/env.example frontend/.env.local
-
-# Edit with your deployed values:
-REACT_APP_S3_BUCKET=your-bucket-name
-REACT_APP_API_BASE_URL=https://your-api-gateway-url.com
-REACT_APP_S3_REGION=us-east-1
+Environment=prod
+MemorySize=512
+Timeout=180
+ReservedConcurrency=2
+LOG_LEVEL=WARNING
+ENABLE_VERBOSE_LOGGING=false
+ENABLE_STRUCTURED_LOGGING=true
+LOG_RETENTION_DAYS=3
 ```
 
-## 📊 S3 Data Structure
+### S3 Data Structure
 
 ```
 s3://bucket/
@@ -489,251 +212,228 @@ s3://bucket/
 │   ├── latest.json          # Latest recommendations
 │   └── daily/
 │       ├── 2024-01-01.json  # Daily snapshots
-│       └── ...
 ├── config/
-│   ├── watchlist.json       # Watchlist configuration
-│   ├── portfolio.json       # Portfolio configuration
-│   ├── us_stocks.json       # US stocks configuration
-│   └── etfs.json           # ETFs configuration
+│   ├── watchlist.json       # Stock configurations
+│   ├── portfolio.json
+│   ├── us_stocks.json
+│   └── etfs.json
 ├── recon/
-│   └── daily/              # Daily reconciliation data
-├── charts/                 # Price chart images
-└── public/                 # Static website files
+│   └── daily/              # Reconciliation data
+└── charts/                 # Price chart images
 ```
 
-## 🔒 Enhanced Security Configuration
+## 📈 Technical Indicators
 
-### Lambda Security
-- IAM roles with minimal permissions
-- VPC isolation (optional)
-- Environment variable encryption
-- X-Ray tracing enabled
+### Trend (40% weight)
+- EMA (12, 26)
+- SMA (50, 200)
+- MACD
+- ADX (14)
 
-### S3 Security
-- Server-side encryption (AES256)
-- Public access blocked for data buckets
-- Versioning enabled
-- Lifecycle policies for cost optimization
-- Bucket policies for least privilege access
+### Momentum (30% weight)
+- RSI (14)
+- Stochastic Oscillator
+- Rate of Change (10)
+- CCI (20)
+- Williams %R
 
-### API Gateway Security
-- Throttling limits (100 requests per minute)
-- CORS configuration
-- Request validation
-- API keys (optional)
-- WAF integration (optional)
+### Volatility (20% weight)
+- ATR (14)
+- Bollinger Bands (20, 2)
+- Historical Volatility
 
-## 💰 Cost Optimization Details
+### Volume (10% weight)
+- On-Balance Volume
+- Volume SMA (20)
+- Volume Rate of Change
+- Price-Volume Trend
+- VWAP
 
-### Lambda Configuration
-- **Memory**: 1024MB (adjustable)
-- **Timeout**: 5 minutes (max 15)
-- **Reserved Concurrency**: 5
-- **Layer Reuse**: Shared dependencies
+## 🎯 Recommendation Logic
 
-### S3 Optimization
-- **Lifecycle Policies**: 
-  - Transition to Standard-IA after 30 days
-  - Transition to Glacier after 90 days
-  - Delete after 1000 days
-- **Intelligent Tiering**: Automatic cost optimization
-- **Compression**: JSON data compression
+### Score Thresholds
+- **Strong Buy**: Score ≥ 0.5
+- **Buy**: Score ≥ 0.2
+- **Hold**: -0.2 ≤ Score < 0.2
+- **Sell**: Score ≤ -0.2
+- **Strong Sell**: Score ≤ -0.5
 
-### Monitoring Costs
-- **CloudWatch Logs**: 14-day retention
-- **Metrics**: Custom metrics for recommendations
-- **Alarms**: Cost and performance alerts
-- **Dashboard**: Pre-built monitoring dashboard
+### Target Prices
+- **Strong Buy**: Current price + 20%
+- **Buy**: Current price + 10%
+- **Hold**: Current price
+- **Sell**: Current price - 5%
+- **Strong Sell**: Current price - 20%
 
-## 🐛 Enhanced Troubleshooting
+### Stop Losses
+- **Strong Buy/Sell**: 10%
+- **Buy**: 8%
+- **Hold/Sell**: 5%
 
-### Common Issues and Solutions
+## 🔄 Data Flow
 
-#### Lambda Timeout Issues
+1. **Data Loading**: Fetch OHLCV from Yahoo Finance with S3 cache
+2. **Indicator Computation**: Calculate 15+ technical indicators
+3. **Signal Generation**: Convert indicators to +1/0/-1 signals
+4. **Score Aggregation**: Weighted combination into final score
+5. **Recommendation**: Convert score to actionable recommendation
+6. **Storage**: Save to S3 with metadata and timestamps
+
+## 🧪 Testing
+
+### Local Testing
 ```bash
-# Check current configuration
-sam logs -n StockAnalyzerFunction --tail
+# Test health endpoint
+curl http://localhost:8000/health
 
-# Solutions:
-# 1. Increase timeout in template.yaml
-# 2. Reduce batch size in configuration
-# 3. Monitor Yahoo Finance API rate limits
-# 4. Optimize symbol processing
-```
+# Test single analysis
+curl http://localhost:8000/analysis/AAPL
 
-#### S3 Access Issues
-```bash
-# Verify bucket policy
-aws s3api get-bucket-policy --bucket your-bucket
-
-# Check IAM permissions
-aws iam get-role-policy --role-name YourLambdaRole --policy-name YourPolicy
-
-# Test S3 access
-aws s3 ls s3://your-bucket/
-```
-
-#### Frontend Loading Issues
-```bash
-# Check S3 website configuration
-aws s3api get-bucket-website --bucket your-bucket
-
-# Verify build files
-aws s3 ls s3://your-bucket/ --recursive
-
-# Check CORS settings
-aws s3api get-bucket-cors --bucket your-bucket
-```
-
-#### Pushover Notification Issues
-```bash
 # Test configuration
-curl -X POST https://your-api-gateway-url.com/notifications/test
-
-# Check environment variables
-aws lambda get-function-configuration --function-name YourFunction
-
-# Verify Pushover credentials
-curl -X POST "https://api.pushover.net/1/users/validate.json" \
-  -d "token=YOUR_TOKEN" \
-  -d "user=YOUR_USER"
+curl http://localhost:8000/config/watchlist
 ```
 
-### Debug Commands
-
+### AWS Testing
 ```bash
-# Monitor Lambda logs in real-time
-aws logs tail /aws/lambda/stock-analyzer-function --follow
+# Test deployed API
+curl https://your-api.execute-api.region.amazonaws.com/health
 
-# Test Lambda locally
-sam local invoke StockAnalyzerFunction --event events/test-event.json
-
-# Check CloudFormation stack status
-aws cloudformation describe-stacks --stack-name 7h-stock-analyzer
-
-# Monitor S3 storage usage
-aws s3 ls s3://your-bucket --recursive --human-readable --summarize
-
-# Test API endpoints
-aws apigateway test-invoke-method \
-  --rest-api-id your-api-id \
-  --resource-id your-resource-id \
-  --http-method GET \
-  --path-with-query-string "/health"
+# Test analysis
+curl https://your-api.execute-api.region.amazonaws.com/analysis/AAPL
 ```
 
-## 📅 Maintenance Schedule
+## 📊 Monitoring
 
-### Daily Tasks
-- Monitor CloudWatch alarms
-- Check recommendation quality
-- Review cost metrics
-- Verify data freshness
+### CloudWatch Metrics
+- Lambda invocations and errors
+- Duration and memory usage
+- S3 storage and requests
+- API Gateway request counts
 
-### Weekly Tasks
-- Update watchlist configurations
-- Review reconciliation data
-- Optimize Lambda performance
-- Check notification effectiveness
+### Cost Alerts
+- Monthly cost > $20
+- Lambda errors > 5/hour
+- S3 storage > 1GB
 
-### Monthly Tasks
-- Review and rotate API keys
-- Update dependencies
-- Audit security settings
-- Analyze performance trends
-- Review cost optimization
+### Health Checks
+- API endpoint availability
+- S3 bucket accessibility
+- Lambda function responsiveness
 
-### Quarterly Tasks
-- Full security audit
-- Architecture review
-- Disaster recovery testing
-- Performance benchmarking
+## 🛠️ Development
 
-## 🚀 Scaling Considerations
+### Project Structure
+```
+├── backend/
+│   ├── app/
+│   │   ├── modules/          # Core analysis modules
+│   │   ├── engine/           # Orchestration layer
+│   │   ├── services/         # AWS integrations
+│   │   └── api/              # API endpoints
+│   └── requirements.txt
+├── frontend/
+│   ├── src/
+│   └── package.json
+├── infra/
+│   ├── aws/                 # AWS deployment scripts
+│   │   ├── deploy_aws_onetime.sh   # AWS backend deployment (one-time)
+│   │   ├── deploy_frontend.sh     # Frontend deployment
+│   │   ├── monitor_costs.sh       # Cost monitoring
+│   │   ├── optimize_costs.sh       # Cost optimization
+│   │   └── template.yaml           # CloudFormation template
+│   └── local/               # Local development scripts
+│       ├── setup_local_onetime.sh  # Local environment setup (one-time)
+│       ├── start_local.sh         # Start dev servers
+│       ├── stop_local.sh          # Stop dev servers
+│       └── test_local.sh           # Test local setup
+└── README.md
+```
 
-### High Volume Scenarios
-- Increase Lambda concurrency limits
-- Implement batch processing optimization
-- Consider Step Functions for complex workflows
-- Add DynamoDB for caching
+### Adding New Indicators
+1. Update `IndicatorEngine` in `backend/app/modules/indicator_engine.py`
+2. Add signal logic in `SignalEngine`
+3. Update weights if needed
+4. Test with single stock analysis
 
-### Multi-Region Deployment
-- Deploy to multiple AWS regions
-- Configure Route53 for failover
-- Implement S3 cross-region replication
-- Set up regional API Gateways
+### Extending Recommendations
+1. Modify thresholds in `RecommendationEngine`
+2. Update target price calculations
+3. Add new reasoning logic
+4. Test with various market conditions
 
-### Enterprise Features
-- AWS WAF integration for security
-- Lambda authorizers for authentication
-- VPC endpoints for private connectivity
-- CloudTrail for comprehensive auditing
-- Config Rules for compliance monitoring
+## 🔒 Security
 
-## � Troubleshooting
+### AWS Security
+- IAM roles with minimal permissions
+- S3 encryption (AES256)
+- VPC isolation (optional)
+- API key authentication (configurable)
+
+### Data Protection
+- No sensitive data in logs
+- Encrypted S3 storage
+- Secure parameter handling
+- Environment variable protection
+
+## 🚨 Troubleshooting
 
 ### Common Issues
 
 **Lambda Timeout**
-- Increase timeout in `template.yaml` (max 15 minutes)
-- Reduce number of symbols in configuration
-- Check for Yahoo Finance API rate limits
+- Check memory allocation
+- Monitor execution duration
+- Optimize batch processing
 
 **S3 Access Issues**
-- Verify bucket policy allows public read for website
-- Check IAM permissions for Lambda function
-- Ensure CORS configuration is correct
+- Verify IAM permissions
+- Check bucket policies
+- Validate region settings
 
-**Frontend Not Loading**
-- Check S3 bucket website configuration
-- Verify build files uploaded to correct bucket
-- Check browser console for JavaScript errors
+**High Costs**
+- Run cost optimization script
+- Review Lambda memory usage
+- Check S3 lifecycle policies
 
-**Missing Recommendations**
-- Check Lambda logs in CloudWatch for errors
-- Verify stock symbols are valid and traded
-- Check Yahoo Finance API availability
+**Data Quality Issues**
+- Validate Yahoo Finance data
+- Check indicator calculations
+- Review signal generation logic
 
-**Pushover Not Working**
-- Verify PUSHOVER_TOKEN and PUSHOVER_USER are set
-- Check Pushover app is enabled
-- Test with `/config/validate` endpoint first
+### Debug Commands
+```bash
+# Check Lambda logs (cost-optimized)
+aws logs tail /aws/lambda/7h-stock-analyzer-prod-StockAnalyzerFunction --follow
 
-## 📞 Support and Debugging
+# Test Lambda locally
+sam local invoke StockAnalyzerFunction --event events/test-event.json
+
+# Monitor S3 storage
+aws s3 ls s3://your-bucket --recursive --human-readable --summarize
+
+# Monitor CloudWatch log costs
+aws logs describe-log-groups --log-group-name-prefix /aws/lambda/
+```
+
+## 📝 License
+
+MIT License - see LICENSE file for details.
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create feature branch
+3. Add tests for new functionality
+4. Ensure cost optimization
+5. Submit pull request
+
+## 📞 Support
 
 For issues and questions:
-1. Check CloudWatch logs for Lambda errors
-2. Verify API endpoints with health check
-3. Test configuration with local development setup
-4. Review SAM template for deployment issues
+1. Check CloudWatch logs
+2. Review deployment outputs
+3. Validate configuration
+4. Test with manual triggers
 
-## 🛣️ Enhanced Roadmap
+---
 
-### Implemented Features ✅
-- [x] Enhanced recommendation engine with target prices
-- [x] Confidence level scoring system
-- [x] Reconciliation service for performance tracking
-- [x] Chart generation for price analysis
-- [x] Enhanced security with API key management
-- [x] Purge service for data lifecycle management
-- [x] Advanced monitoring and alerting
-- [x] Enhanced frontend with real-time updates
-
-### Future Enhancements 🚀
-- **Machine Learning Integration**: Advanced prediction models
-- **Backtesting Engine**: Historical performance analysis
-- **Portfolio Management**: Track multiple portfolios
-- **Real-time WebSocket**: Live price updates
-- **Mobile Application**: React Native mobile app
-- **Advanced Charting**: TradingView integration
-- **Social Features**: Community recommendations
-- **Multi-market Support**: International exchanges
-- **Alternative Data**: News sentiment, social media analysis
-- **Risk Management**: Portfolio risk analytics
-- **Automated Trading**: Broker integration (paper trading)
-- **Custom Indicators**: User-defined technical indicators
-- **API Marketplace**: Third-party integrations
-
-## 📄 License
-
-This project is provided as-is for educational purposes. Feel free to fork, modify, and improve according to your needs.
+**Built with ❤️ for quantitative analysis and automated trading insights**

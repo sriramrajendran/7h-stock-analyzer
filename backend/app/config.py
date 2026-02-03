@@ -59,6 +59,13 @@ def load_symbols_from_config() -> List[str]:
 # Logging Configuration
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
 ENABLE_DEBUG_LOGGING = LOG_LEVEL.upper() == 'DEBUG'
+ENABLE_VERBOSE_LOGGING = os.getenv('ENABLE_VERBOSE_LOGGING', 'false').lower() == 'true'
+ENVIRONMENT = os.getenv('ENVIRONMENT', 'dev')
+
+# Cost-optimized logging settings
+PRODUCTION_LOG_LEVEL = 'WARNING'  # Only WARNING and above in production
+LOG_RETENTION_DAYS = int(os.getenv('LOG_RETENTION_DAYS', '7'))
+ENABLE_STRUCTURED_LOGGING = os.getenv('ENABLE_STRUCTURED_LOGGING', 'true').lower() == 'true'
 
 # API Configuration
 API_TITLE = "Stock Recommendation Engine"

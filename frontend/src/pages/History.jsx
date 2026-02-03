@@ -17,21 +17,18 @@ const History = () => {
     try {
       setLoading(true)
       setError(null)
-      // For now, use a mock implementation
-      // In production, this would call a Lambda function to list S3 objects
-      const mockDates = [
-        '2026-02-02',
-        '2026-02-01', 
-        '2026-01-31',
-        '2026-01-30',
-        '2026-01-29'
-      ]
-      setAvailableDates(mockDates)
-      if (mockDates.length > 0) {
-        setSelectedDate(mockDates[0])
+      
+      // Get real dates from API
+      const response = await s3Api.listAvailableDates()
+      const dates = response.dates || []
+      
+      setAvailableDates(dates)
+      if (dates.length > 0) {
+        setSelectedDate(dates[0]) // Select the most recent date
       }
     } catch (err) {
-      setError(err.message)
+      setError('Failed to fetch available dates')
+      console.error('Error fetching dates:', err)
     } finally {
       setLoading(false)
     }

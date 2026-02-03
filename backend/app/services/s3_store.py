@@ -9,12 +9,12 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 from botocore.exceptions import ClientError
 from app.models import Recommendation
-import logging
+from app.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger()
 
 # Configuration
-BUCKET_NAME = os.getenv('S3_BUCKET_NAME', 'stock-analyzer-local')
+BUCKET_NAME = os.getenv('S3_BUCKET_NAME', '7h-stock-analyzer-dev')
 AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
 
 # Initialize S3 client
@@ -32,8 +32,8 @@ def persist_results(recommendations: List[Recommendation]) -> bool:
         timestamp = datetime.utcnow()
         date_str = timestamp.strftime('%Y-%m-%d')
         
-        # Convert recommendations to dicts
-        recommendations_data = [rec.dict() for rec in recommendations]
+        # Convert recommendations to dicts (they're already dicts now)
+        recommendations_data = recommendations
         
         # Prepare enhanced data with metadata
         data = {
@@ -80,6 +80,34 @@ def persist_results(recommendations: List[Recommendation]) -> bool:
         return False
 
 
+def get_available_dates() -> List[str]:
+    """Get list of available dates with historical recommendations"""
+    try:
+        response = s3_client.list_objects_v2(
+            Bucket=BUCKET_NAME,
+            Prefix='data/daily/'
+        )
+        
+        dates = []
+        for obj in response.get('Contents', []):
+            key = obj['Key']
+            if key.endswith('.json'):
+                # Extract date from key like 'data/daily/2026-02-03.json'
+                date_str = key.split('/')[-1].replace('.json', '')
+                dates.append(date_str)
+        
+        # Sort dates in descending order (newest first)
+        dates.sort(reverse=True)
+        return dates
+        
+    except ClientError as e:
+        logger.error(f"S3 error listing dates: {e}")
+        return []
+    except Exception as e:
+        logger.error(f"Error listing available dates: {e}")
+        return []
+
+
 def get_latest_results() -> Dict[str, Any]:
     """Get the latest recommendations from S3"""
     try:
@@ -94,10 +122,10 @@ def get_latest_results() -> Dict[str, Any]:
     except ClientError as e:
         if e.response['Error']['Code'] == 'NoSuchKey':
             return {'error': 'No latest results found'}
-        print(f"S3 client error: {e}")
+        logger.error(f"S3 client error: {e}", error=str(e), operation="get_latest_results")
         return {'error': f'S3 error: {str(e)}'}
     except Exception as e:
-        print(f"Error getting latest results: {e}")
+        logger.error(f"Error getting latest results: {e}", error=str(e), operation="get_latest_results")
         return {'error': f'Error: {str(e)}'}
 
 
@@ -125,10 +153,10 @@ def get_historical_results(date: str) -> Dict[str, Any]:
     except ClientError as e:
         if e.response['Error']['Code'] == 'NoSuchKey':
             return {'error': f'No data found for date {date}'}
-        print(f"S3 client error: {e}")
+        logger.error(f"S3 client error: {e}", error=str(e), operation="get_historical_results", date=date)
         return {'error': f'S3 error: {str(e)}'}
     except Exception as e:
-        print(f"Error getting historical results: {e}")
+        logger.error(f"Error getting historical results: {e}", error=str(e), operation="get_historical_results", date=date)
         return {'error': f'Error: {str(e)}'}
 
 
@@ -166,7 +194,7 @@ def list_available_dates() -> List[str]:
         return dates
         
     except Exception as e:
-        print(f"Error listing available dates: {e}")
+        logger.error(f"Error listing available dates: {e}", error=str(e), operation="list_available_dates")
         return []
 
 
@@ -206,7 +234,7 @@ def get_recommendations_summary() -> Dict[str, Any]:
         }
         
     except Exception as e:
-        print(f"Error getting recommendations summary: {e}")
+        logger.error(f"Error getting recommendations summary: {e}", error=str(e), operation="get_recommendations_summary")
         return {'error': f'Error: {str(e)}'}
 
 
@@ -215,7 +243,7 @@ def create_bucket_if_not_exists() -> bool:
     try:
         # Check if bucket exists
         s3_client.head_bucket(Bucket=BUCKET_NAME)
-        print(f"Bucket {BUCKET_NAME} already exists")
+        logger.info(f"Bucket {BUCKET_NAME} already exists", bucket=BUCKET_NAME, operation="check_bucket")
         return True
         
     except ClientError as e:
@@ -230,14 +258,14 @@ def create_bucket_if_not_exists() -> bool:
                         Bucket=BUCKET_NAME,
                         CreateBucketConfiguration={'LocationConstraint': AWS_REGION}
                     )
-                print(f"Created bucket {BUCKET_NAME}")
+                logger.info(f"Created bucket {BUCKET_NAME}", bucket=BUCKET_NAME, operation="create_bucket")
                 return True
                 
             except ClientError as create_error:
-                print(f"Error creating bucket: {create_error}")
+                logger.error(f"Error creating bucket: {create_error}", error=str(create_error), operation="create_bucket")
                 return False
         else:
-            print(f"Error checking bucket: {e}")
+            logger.error(f"Error checking bucket: {e}", error=str(e), operation="check_bucket")
             return False
 
 
