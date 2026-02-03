@@ -1,14 +1,13 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  7H Stock Analyzer - Enhanced serverless stock analysis with Lambda, EventBridge, S3, and API Gateway
   Features: Target prices, stop losses, confidence levels, recon, purge, security
 
 Globals:
   Function:
     Runtime: python3.10
-    Timeout: 900  # 15 minutes for stock analysis (reduced from 5 minutes)
-    MemorySize: 512  # Reduced from 1024MB for cost optimization
+    Timeout: 900
+    MemorySize: 512
     Environment:
       Variables:
         AWS_REGION: !Ref AWS::Region
@@ -16,13 +15,12 @@ Globals:
         PUSHOVER_TOKEN: !Ref PushoverToken
         PUSHOVER_USER: !Ref PushoverUser
         ENABLE_NOTIFICATIONS: "true"
-        LOG_LEVEL: "WARNING"  # Reduced from INFO to minimize logs
+        LOG_LEVEL: "WARNING"
         ENVIRONMENT: "prod"
-        ENABLE_VERBOSE_LOGGING: "false"  # Disable verbose logging in production
-        ENABLE_STRUCTURED_LOGGING: "true"  # Use structured logging for cost efficiency
-        REQUIRE_AUTH: "true"  # Enable API key authentication
-        API_KEY: "{{resolve:ssm:/stock-analyzer/api-key:1}}"  # Secure API key from AWS Systems Manager
-    Tracing: Active  # Enable X-Ray tracing
+        ENABLE_VERBOSE_LOGGING: "false"
+        ENABLE_STRUCTURED_LOGGING: "true"
+        REQUIRE_AUTH: "true"
+        API_KEY: "{{resolve:ssm:/stock-analyzer/api-key:1}}"
     Tags:
       Project: "7H-Stock-Analyzer"
       Environment: "Production"
@@ -32,12 +30,12 @@ Parameters:
     Type: String
     Description: Pushover API token for notifications
     Default: ""
-    NoEcho: true  # Secure parameter
+    NoEcho: true
   PushoverUser:
     Type: String
     Description: Pushover user key for notifications
     Default: ""
-    NoEcho: true  # Secure parameter
+    NoEcho: true
   Environment:
     Type: String
     Description: Environment name (dev/staging/prod)
@@ -50,36 +48,28 @@ Parameters:
     AllowedValues: ["true", "false"]
 
 Resources:
-  # Lambda Function with enhanced security
   StockAnalyzerFunction:
     Type: AWS::Serverless::Function
     Properties:
       Handler: app.main.handler
-      CodeUri: backend/
-      Description: Enhanced Lambda function for stock analysis with FastAPI
+      CodeUri: s3://7h-stock-analyzer/stock-analyzer-lambda.zip
+      Description: Lambda function for stock analysis with FastAPI
       Architectures:
         - x86_64
       Layers:
-        - !Ref DependenciesLayer  # Shared dependencies layer
+        - !Ref DependenciesLayer
       Policies:
-        # Minimal S3 permissions
-        - S3ReadPolicy:
-            BucketName: !Ref StockDataBucket
-        - S3WritePolicy:
-            BucketName: !Ref StockDataBucket
         - Statement:
             - Effect: Allow
               Action:
                 - s3:ListBucket
               Resource: !Sub "arn:aws:s3:::${StockDataBucket}"
-        - Statement:
             - Effect: Allow
               Action:
                 - s3:GetObject
                 - s3:PutObject
                 - s3:DeleteObject
               Resource: !Sub "arn:aws:s3:::${StockDataBucket}/*"
-        # CloudWatch Logs permissions
         - Statement:
             - Effect: Allow
               Action:
@@ -87,31 +77,12 @@ Resources:
                 - logs:CreateLogStream
                 - logs:PutLogEvents
               Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${StockAnalyzerFunction}*"
-        # X-Ray permissions
-        - Statement:
-            - Effect: Allow
-              Action:
-                - xray:PutTraceSegments
-                - xray:PutTelemetryRecords
-              Resource: "*"
-      VpcConfig: !If
-        - EnableVpcCondition
-        - SecurityGroupIds:
-            - !Ref LambdaSecurityGroup
-          SubnetIds:
-            - !Ref PrivateSubnet1
-            - !Ref PrivateSubnet2
-        - !Ref "AWS::NoValue"
       Events:
-        # API Gateway with security
         Api:
           Type: HttpApi
           Properties:
             Path: /{proxy+}
             Method: ANY
-            Auth:
-              DefaultAuthorizer: NONE  # Can be enhanced with Lambda authorizer
-        # EventBridge Cron Trigger 1 - 30 minutes after market open (10:00 AM EST = 15:00 UTC)
         CronTrigger30Min:
           Type: Schedule
           Properties:
@@ -119,13 +90,9 @@ Resources:
             Name: StockAnalyzerCron30Min
             Description: Trigger stock analysis 30 minutes after market open
             Enabled: true
-            # Enhanced retry policy with limited attempts
             RetryPolicy:
-              MaximumRetryAttempts: 1  # Reduced from 2
-              MaximumEventAgeInSeconds: 1800  # Reduced from 3600
-            # Reserved concurrency to control costs and prevent runaway execution
-            ReservedConcurrentExecutions: 1
-        # EventBridge Cron Trigger 2 - Midday trading (12:30 PM EST = 17:30 UTC)
+              MaximumRetryAttempts: 1
+              MaximumEventAgeInSeconds: 1800
         CronTriggerMidday:
           Type: Schedule
           Properties:
@@ -133,13 +100,9 @@ Resources:
             Name: StockAnalyzerCronMidday
             Description: Trigger stock analysis at midday trading
             Enabled: true
-            # Enhanced retry policy with limited attempts
             RetryPolicy:
-              MaximumRetryAttempts: 1  # Reduced from 2
-              MaximumEventAgeInSeconds: 1800  # Reduced from 3600
-            # Reserved concurrency to control costs and prevent runaway execution
-            ReservedConcurrentExecutions: 1
-        # EventBridge Cron Trigger 3 - Weekly reconciliation (Sunday 6:00 PM EST = 23:00 UTC)
+              MaximumRetryAttempts: 1
+              MaximumEventAgeInSeconds: 1800
         CronTriggerWeeklyRecon:
           Type: Schedule
           Properties:
@@ -147,67 +110,58 @@ Resources:
             Name: StockAnalyzerWeeklyRecon
             Description: Trigger weekly reconciliation for performance tracking
             Enabled: true
-            # Enhanced retry policy with limited attempts
             RetryPolicy:
               MaximumRetryAttempts: 2
               MaximumEventAgeInSeconds: 3600
-            # Reserved concurrency to control costs and prevent runaway execution
-            ReservedConcurrentExecutions: 1
 
-  # Dependencies Layer for shared libraries
   DependenciesLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
       LayerName: StockAnalyzerDependencies
       Description: Shared dependencies for stock analyzer
-      ContentUri: layer/
+      ContentUri: s3://7h-stock-analyzer/stock-analyzer-layer.zip
       CompatibleRuntimes:
         - python3.10
       RetentionPolicy: Retain
 
-  # Enhanced S3 Bucket with security
   StockDataBucket:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub "7h-stock-analyzer-${Environment}"
-      # Enhanced security with MFA delete
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-      # Versioning with MFA delete protection
       VersioningConfiguration:
         Status: Enabled
         MfaDelete: Enabled
-      # Server-side encryption with KMS
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: aws:kms
               KMSMasterKeyID: alias/aws/s3
             BucketKeyEnabled: true
-      # Lifecycle policies for aggressive cost management
       LifecycleConfiguration:
         Rules:
           - Id: DeleteOldDailyFiles
             Status: Enabled
-            ExpirationInDays: 365  # Reduced from 1000
+            ExpirationInDays: 365
             Filter:
               Prefix: data/daily/
           - Id: DeleteOldReconFiles
             Status: Enabled
-            ExpirationInDays: 180  # Reduced from 365
+            ExpirationInDays: 180
             Filter:
               Prefix: recon/daily/
           - Id: DeleteOldCharts
             Status: Enabled
-            ExpirationInDays: 30  # Reduced from 90
+            ExpirationInDays: 30
             Filter:
               Prefix: charts/
           - Id: DeleteTempFiles
             Status: Enabled
-            ExpirationInDays: 7  # Aggressive cleanup
+            ExpirationInDays: 7
             Filter:
               Prefix: temp/
           - Id: DeleteOldLogs
@@ -215,11 +169,9 @@ Resources:
             ExpirationInDays: 30
             Filter:
               Prefix: logs/
-      # Website configuration for frontend
       WebsiteConfiguration:
         IndexDocument: index.html
         ErrorDocument: error.html
-      # Restricted CORS for security
       CorsConfiguration:
         CorsRules:
           - AllowedHeaders: ["Content-Type", "Authorization"]
@@ -228,14 +180,12 @@ Resources:
             MaxAge: 3600
             ExposedHeaders: []
 
-  # Enhanced S3 Bucket Policy with restricted access
   StockDataBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
       Bucket: !Ref StockDataBucket
       PolicyDocument:
         Statement:
-          # Allow public read access only to website files (for static website hosting)
           - Sid: PublicReadWebsiteFiles
             Effect: Allow
             Principal: "*"
@@ -245,7 +195,6 @@ Resources:
               - !Sub "arn:aws:s3:::${StockDataBucket}/error.html"
               - !Sub "arn:aws:s3:::${StockDataBucket}/public/*"
               - !Sub "arn:aws:s3:::${StockDataBucket}/assets/*"
-          # Deny insecure connections (HTTPS only)
           - Sid: DenyInsecureConnections
             Effect: Deny
             Principal: "*"
@@ -256,7 +205,6 @@ Resources:
             Condition:
               Bool:
                 aws:SecureTransport: false
-          # Allow Lambda function access
           - Sid: LambdaAccess
             Effect: Allow
             Principal:
@@ -269,7 +217,6 @@ Resources:
             Resource: 
               - !Sub "arn:aws:s3:::${StockDataBucket}"
               - !Sub "arn:aws:s3:::${StockDataBucket}/*"
-          # Allow root account access
           - Sid: RootAccountAccess
             Effect: Allow
             Principal:
@@ -279,7 +226,6 @@ Resources:
             Resource: 
               - !Sub "arn:aws:s3:::${StockDataBucket}"
               - !Sub "arn:aws:s3:::${StockDataBucket}/*"
-          # Allow current user access (the person deploying the stack)
           - Sid: CurrentUserAccess
             Effect: Allow
             Principal:
@@ -289,7 +235,6 @@ Resources:
             Resource: 
               - !Sub "arn:aws:s3:::${StockDataBucket}"
               - !Sub "arn:aws:s3:::${StockDataBucket}/*"
-          # Explicit deny all other access
           - Sid: DenyAllOtherAccess
             Effect: Deny
             NotPrincipal:
@@ -302,13 +247,10 @@ Resources:
               - !Sub "arn:aws:s3:::${StockDataBucket}"
               - !Sub "arn:aws:s3:::${StockDataBucket}/*"
 
-  # Enhanced API Gateway with security
   StockAnalyzerApi:
     Type: AWS::Serverless::HttpApi
     Properties:
-      Description: Enhanced API Gateway with security and cost controls
-      Auth:
-        DefaultAuthorizer: NONE  # UI needs API key authentication, not IAM
+      Description: API Gateway with security and cost controls
       CorsConfiguration:
         AllowMethods:
           - GET
@@ -316,163 +258,20 @@ Resources:
           - OPTIONS
         AllowHeaders:
           - "Content-Type"
-          - "X-API-Key"  # API key header for UI authentication
+          - "X-API-Key"
         AllowOrigins:
-          - "https://yourdomain.com"  # Restrict to your domain in production
           - "https://*.amazonaws.com"
-          - "http://localhost:*"  # Development only
+          - "http://localhost:*"
         MaxAge: 3600
-      # Enable detailed logging
-      LoggingLevel: ERROR  # Reduced from INFO to save costs
-      MetricsEnabled: true
-      # Aggressive throttling for cost control
-      RouteSettings:
-        "POST /run-now":
-          ThrottlingBurstLimit: 2  # Reduced from 5
-          ThrottlingRateLimit: 5   # Reduced from 10
-        "POST /config/update":
-          ThrottlingBurstLimit: 1  # Reduced from 2
-          ThrottlingRateLimit: 2   # Reduced from 5
-        "GET /":
-          ThrottlingBurstLimit: 10
-          ThrottlingRateLimit: 20
 
-  # Cost-optimized CloudWatch Log Group
   StockAnalyzerLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub "/aws/lambda/${StockAnalyzerFunction}"
-      RetentionInDays: 3  # Further reduced from 7 days for cost optimization
-      # Enable log encryption
-      KmsKeyId: alias/aws/logs
-
-  # Cost-optimized CloudWatch Alarms
-  StockAnalyzerErrorAlarm:
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmName: !Sub "${StockAnalyzerFunction}-Errors"
-      AlarmDescription: "Lambda function errors - Cost optimized monitoring"
-      MetricName: Errors
-      Namespace: AWS/Lambda
-      Statistic: Sum
-      Period: 1800  # 30 minutes (increased from 15 minutes for cost savings)
-      EvaluationPeriods: 5  # Increased from 3 to reduce false alarms
-      Threshold: 5   # Increased threshold to reduce noise and costs
-      ComparisonOperator: GreaterThanOrEqualToThreshold
-      Dimensions:
-        - Name: FunctionName
-          Value: !Ref StockAnalyzerFunction
-      # Basic alarm configuration
-      TreatMissingData: missing
-
-  StockAnalyzerDurationAlarm:
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmName: !Sub "${StockAnalyzerFunction}-Duration"
-      AlarmDescription: "Lambda function duration - Cost optimized monitoring"
-      MetricName: Duration
-      Namespace: AWS/Lambda
-      Statistic: Average
-      Period: 1800  # 30 minutes (increased from 15 minutes for cost savings)
-      EvaluationPeriods: 2
-      Threshold: 480000  # 8 minutes (increased from 4 minutes)
-      ComparisonOperator: GreaterThanOrEqualToThreshold
-      Dimensions:
-        - Name: FunctionName
-          Value: !Ref StockAnalyzerFunction
-      TreatMissingData: missing
+      RetentionInDays: 3
 
 
-  # VPC Resources (conditional)
-  LambdaSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Condition: EnableVpcCondition
-    Properties:
-      GroupDescription: "Security group for Lambda function"
-      VpcId: !Ref VPC
-      SecurityGroupEgress:
-        - IpProtocol: -1
-          CidrIp: 0.0.0.0/0
-      SecurityGroupIngress:
-        - IpProtocol: -1
-          SourceSecurityGroupId: !Ref LambdaSecurityGroup
-
-  VPC:
-    Type: AWS::EC2::VPC
-    Condition: EnableVpcCondition
-    Properties:
-      CidrBlock: 10.0.0.0/16
-      EnableDnsSupport: true
-      EnableDnsHostnames: true
-
-  PrivateSubnet1:
-    Type: AWS::EC2::Subnet
-    Condition: EnableVpcCondition
-    Properties:
-      VpcId: !Ref VPC
-      CidrBlock: 10.0.1.0/24
-      AvailabilityZone: !Select [0, !GetAZs]
-
-  PrivateSubnet2:
-    Type: AWS::EC2::Subnet
-    Condition: EnableVpcCondition
-    Properties:
-      VpcId: !Ref VPC
-      CidrBlock: 10.0.2.0/24
-      AvailabilityZone: !Select [1, !GetAZs]
-
-  # Enhanced CloudWatch Dashboard
-  StockAnalyzerDashboard:
-    Type: AWS::CloudWatch::Dashboard
-    Properties:
-      DashboardName: !Sub "${AWS::StackName}-Dashboard"
-      DashboardBody: !Sub |
-        {
-          "widgets": [
-            {
-              "type": "metric",
-              "properties": {
-                "metrics": [
-                  ["AWS/Lambda", "Invocations", "FunctionName", "${StockAnalyzerFunction}"],
-                  [".", ".", ".", {"label": "Errors", "stat": "Sum"}]
-                ],
-                "view": "timeSeries",
-                "stacked": false,
-                "region": "${AWS::Region}",
-                "title": "Lambda Invocations and Errors",
-                "period": 300
-              }
-            },
-            {
-              "type": "metric",
-              "properties": {
-                "metrics": [
-                  ["AWS/Lambda", "Duration", "FunctionName", "${StockAnalyzerFunction}"]
-                ],
-                "view": "timeSeries",
-                "stacked": false,
-                "region": "${AWS::Region}",
-                "title": "Lambda Duration",
-                "period": 300
-              }
-            },
-            {
-              "type": "metric",
-              "properties": {
-                "metrics": [
-                  ["AWS/S3", "NumberOfObjects", "BucketName", "${StockDataBucket}"]
-                ],
-                "view": "timeSeries",
-                "stacked": false,
-                "region": "${AWS::Region}",
-                "title": "S3 Objects Count",
-                "period": 86400
-              }
-            }
-          ]
-        }
-
-Conditions:
+  Conditions:
   EnableVpcCondition: !Equals [!Ref EnableVpc, "true"]
 
 Outputs:
@@ -499,5 +298,3 @@ Outputs:
     Value: !Sub "http://${StockDataBucket}.s3-website-${AWS::Region}.amazonaws.com"
     Export:
       Name: !Sub "${AWS::StackName}-StockDataBucketURL"
-
-  

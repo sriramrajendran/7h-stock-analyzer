@@ -159,7 +159,7 @@ const RecommendationTable = ({ recommendations }) => {
                   <div className="text-sm">
                     <div className="font-bold text-blue-600">{formatPrice(rec.target_price)}</div>
                     <div className="text-xs text-gray-500">
-                      +{((rec.target_price - rec.price) / rec.price * 100).toFixed(1)}%
+                      +{rec.current_price ? ((rec.target_price - rec.current_price) / rec.current_price * 100).toFixed(1) : 'N/A'}%
                     </div>
                   </div>
                 </td>
@@ -167,7 +167,7 @@ const RecommendationTable = ({ recommendations }) => {
                   <div className="text-sm">
                     <div className="font-bold text-red-600">{formatPrice(rec.stop_loss)}</div>
                     <div className="text-xs text-gray-500">
-                      -{((rec.price - rec.stop_loss) / rec.price * 100).toFixed(1)}%
+                      -{rec.current_price ? ((rec.current_price - rec.stop_loss) / rec.current_price * 100).toFixed(1) : 'N/A'}%
                     </div>
                   </div>
                 </td>
@@ -192,7 +192,7 @@ const RecommendationTable = ({ recommendations }) => {
                     </div>
                     {rec.rsi && (
                       <div className="text-xs text-gray-500 mt-1">
-                        RSI: {rec.rsi.toFixed(1)}
+                        RSI: {rec.rsi ? rec.rsi.toFixed(1) : 'N/A'}
                       </div>
                     )}
                   </div>

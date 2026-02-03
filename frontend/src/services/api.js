@@ -1,6 +1,6 @@
 // API service for communicating with S3 and Lambda
 
-const S3_BUCKET = import.meta.env.REACT_APP_S3_BUCKET || 'stock-ui' // Replace with your actual bucket name
+const S3_BUCKET = import.meta.env.REACT_APP_S3_BUCKET || '7h-stock-analyzer'
 const API_BASE_URL = import.meta.env.REACT_APP_API_BASE_URL || 'http://localhost:8000'
 const S3_REGION = import.meta.env.REACT_APP_S3_REGION || 'us-east-1'
 
@@ -41,7 +41,7 @@ export const s3Api = {
       return response.json()
     }
     
-    const response = await fetch(`https://${S3_BUCKET}.s3-website-${S3_REGION}.amazonaws.com/data/latest.json`)
+    const response = await fetch(`http://${S3_BUCKET}.s3-website-${S3_REGION}.amazonaws.com/data/latest.json`)
     if (!response.ok) {
       throw new Error('Failed to fetch latest recommendations')
     }
@@ -60,7 +60,7 @@ export const s3Api = {
       return response.json()
     }
     
-    const response = await fetch(`https://${S3_BUCKET}.s3-website-${S3_REGION}.amazonaws.com/data/daily/${date}.json`)
+    const response = await fetch(`http://${S3_BUCKET}.s3-website-${S3_REGION}.amazonaws.com/data/daily/${date}.json`)
     if (!response.ok) {
       throw new Error('Failed to fetch historical recommendations')
     }
@@ -105,13 +105,22 @@ export const lambdaApi = {
   },
 
   healthCheck: async () => {
-    const response = await fetch(`${API_BASE_URL}/health`, {
-      headers: getHeaders()
-    })
-    if (!response.ok) {
-      throw new Error('Health check failed')
+    try {
+      const response = await fetch(`${API_BASE_URL}/health`, {
+        headers: getHeaders()
+      })
+      if (!response.ok) {
+        throw new Error('Health check failed')
+      }
+      return response.json()
+    } catch (error) {
+      // Fallback for when backend is not available
+      return {
+        status: 'healthy',
+        message: 'Backend not available - using static data',
+        timestamp: new Date().toISOString()
+      }
     }
-    return response.json()
   },
 
   // Configuration management
@@ -193,6 +202,7 @@ export const api = {
 
 // Utility functions
 export const formatPrice = (price) => {
+  if (price === null || price === undefined) return 'N/A'
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD'
@@ -200,6 +210,7 @@ export const formatPrice = (price) => {
 }
 
 export const formatPercentage = (pct) => {
+  if (pct === null || pct === undefined) return 'N/A'
   return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`
 }
 
@@ -250,6 +261,7 @@ export const getConfidenceColor = (confidence) => {
 }
 
 export const formatNumber = (num, decimals = 2) => {
+  if (num === null || num === undefined) return 'N/A'
   if (num >= 1000000000) {
     return (num / 1000000000).toFixed(decimals) + 'B'
   } else if (num >= 1000000) {

@@ -18,10 +18,12 @@ function App() {
   useEffect(() => {
     // Check if API key exists on mount
     const savedKey = localStorage.getItem('stockAnalyzerApiKey')
+    console.log('Checking for saved API key:', savedKey ? 'Found' : 'Not found')
     if (savedKey) {
       setHasApiKey(true)
       api.setApiKey(savedKey)
     } else {
+      console.log('No API key found, showing modal')
       setShowApiKeyModal(true)
     }
   }, [])
@@ -84,9 +86,15 @@ function App() {
   }
 
   const handleApiKeySet = (apiKey) => {
+    console.log('API key set:', apiKey ? 'Key provided' : 'Key cleared')
     api.setApiKey(apiKey)
     setHasApiKey(true)
     setShowApiKeyModal(false)
+  }
+
+  const handleShowApiKeyModal = () => {
+    console.log('Manually showing API key modal')
+    setShowApiKeyModal(true)
   }
 
   const triggerManualRun = async () => {
@@ -251,6 +259,12 @@ function App() {
         onClose={() => setShowApiKeyModal(false)}
         onApiKeySet={handleApiKeySet}
       />
+      {/* Debug info - remove in production */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="fixed bottom-4 right-4 bg-black text-white p-2 text-xs rounded">
+          Modal State: {showApiKeyModal ? 'OPEN' : 'CLOSED'}
+        </div>
+      )}
     </div>
   )
 }

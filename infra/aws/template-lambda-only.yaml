@@ -1,0 +1,91 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: 7H Stock Analyzer - Lambda only deployment
+
+Parameters:
+  Environment:
+    Type: String
+    Description: Environment name
+    Default: "dev"
+    AllowedValues: ["dev", "staging", "prod"]
+
+Resources:
+  StockAnalyzerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: app.main.handler
+      CodeUri: s3://7h-stock-analyzer/stock-analyzer-lambda.zip
+      Runtime: python3.10
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref DependenciesLayer
+      MemorySize: 512
+      Timeout: 180
+      Environment:
+        Variables:
+          AWS_REGION: !Ref AWS::Region
+          S3_BUCKET_NAME: !Ref StockDataBucket
+          LOG_LEVEL: "INFO"
+          ENVIRONMENT: !Ref Environment
+          PUSHOVER_TOKEN: "your_pushover_token"
+          PUSHOVER_USER: "your_pushover_user"
+          ENABLE_NOTIFICATIONS: "true"
+          REQUIRE_AUTH: "true"
+          API_KEY: "your_api_key"
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:ListBucket
+              Resource: !Sub "arn:aws:s3:::${StockDataBucket}"
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+                - s3:DeleteObject
+              Resource: !Sub "arn:aws:s3:::${StockDataBucket}/*"
+            - Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${StockAnalyzerFunction}*"
+
+  DependenciesLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: StockAnalyzerDependencies
+      ContentUri: s3://7h-stock-analyzer/stock-analyzer-layer.zip
+      CompatibleRuntimes:
+        - python3.10
+      RetentionPolicy: Retain
+
+  StockDataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "7h-stock-analyzer-${Environment}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+Outputs:
+  StockDataBucket:
+    Description: "S3 bucket for stock data"
+    Value: !Ref StockDataBucket
+
+  StockAnalyzerFunction:
+    Description: "Lambda Function ARN"
+    Value: !GetAtt StockAnalyzerFunction.Arn
+
+  StockAnalyzerFunctionName:
+    Description: "Lambda Function Name"
+    Value: !Ref StockAnalyzerFunction

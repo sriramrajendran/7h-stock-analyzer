@@ -101,6 +101,11 @@ credentials/
 *.sqlite
 *.sqlite3
 
+# Package files
+*.zip
+*.tar.gz
+*.tar
+
 # Backup files
 *.bak
 *.backup
@@ -109,3 +114,14 @@ credentials/
 # Temporary credentials
 temp_credentials*
 *.tmp
+
+# AWS deployment artifacts and temporary files
+infra/aws/*.zip
+infra/aws/response.json
+infra/aws/payload.b64
+infra/build/
+
+# Frontend environment files (redundant with base folder .env.local.example)
+frontend/.env.local
+frontend/.env.production
+frontend/.env.example

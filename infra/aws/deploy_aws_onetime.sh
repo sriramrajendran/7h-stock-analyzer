@@ -3,6 +3,14 @@ set -e
 
 echo "🚀 Deploying 7H Stock Analyzer to AWS (Cost-Optimized)..."
 
+# Load environment variables
+if [ ! -f ../../.env.local ]; then
+    echo "❌ .env.local not found. Please create .env.local with AWS configuration."
+    exit 1
+fi
+
+export $(grep -v '^#' ../../.env.local | xargs)
+
 # Check if AWS CLI is configured
 if ! aws sts get-caller-identity &>/dev/null; then
     echo "❌ AWS CLI not configured. Please run 'aws configure' first."
@@ -33,7 +41,7 @@ echo "  Timeout: ${TIMEOUT}s"
 echo "  Concurrency: ${RESERVED_CONCURRENCY}"
 
 # Create S3 bucket for deployment artifacts
-DEPLOYMENT_BUCKET="7h-stock-analyzer-deploy"
+DEPLOYMENT_BUCKET="$S3_BUCKET_NAME_PROD"
 echo "🪣 Creating deployment bucket: $DEPLOYMENT_BUCKET"
 
 if ! aws s3 ls "s3://$DEPLOYMENT_BUCKET" &>/dev/null; then
@@ -45,50 +53,50 @@ fi
 
 # Build Lambda layer
 echo "📦 Building Lambda layer..."
-rm -rf ../layer/python
-mkdir -p ../layer/python
+rm -rf ../build/layer
+mkdir -p ../build/layer/python
 
 # Install only essential dependencies for production
 echo "Installing production dependencies..."
-pip install --platform manylinux2014_x86_64 --only-binary=:all: \
-    --target layer/python \
-    -r backend/requirements.txt
+pip install \
+    --target ../build/layer/python \
+    -r ../../backend/requirements.txt
 
 # Optimize layer size
 echo "Optimizing layer size..."
-find ../layer/python -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-find ../layer/python -name "*.pyc" -delete 2>/dev/null || true
-find ../layer/python -name "*.pyo" -delete 2>/dev/null || true
-find ../layer/python -name "*.pyd" -delete 2>/dev/null || true
-find ../layer/python -name "*.so" -delete 2>/dev/null || true
+find ../build/layer/python -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+find ../build/layer/python -name "*.pyc" -delete 2>/dev/null || true
+find ../build/layer/python -name "*.pyo" -delete 2>/dev/null || true
+find ../build/layer/python -name "*.pyd" -delete 2>/dev/null || true
+find ../build/layer/python -name "*.so" -delete 2>/dev/null || true
 
 # Remove unnecessary files
-rm -rf ../layer/python/*/tests 2>/dev/null || true
-rm -rf ../layer/python/*/.github 2>/dev/null || true
-rm -rf ../layer/python/*/doc 2>/dev/null || true
+rm -rf ../build/layer/python/*/tests 2>/dev/null || true
+rm -rf ../build/layer/python/*/.github 2>/dev/null || true
+rm -rf ../build/layer/python/*/doc 2>/dev/null || true
 
 # Compress layer
 echo "Compressing layer..."
-cd ../layer
-zip -r ../stock-analyzer-layer.zip python -x "*.pyc" "*.pyo" "__pycache__/*"
-cd ..
+cd ../build/layer
+zip -r ../../stock-analyzer-layer.zip python -x "*.pyc" "*.pyo" "__pycache__/*"
+cd ../..
 
 LAYER_SIZE=$(du -h stock-analyzer-layer.zip | cut -f1)
 echo "✅ Lambda layer created: $LAYER_SIZE"
 
 # Build application package
 echo "📦 Building application package..."
-rm -rf package
-mkdir -p package
+rm -rf ../build/package
+mkdir -p ../build/package
 
 # Copy only necessary files
-cp -r backend/app package/
-cp backend/requirements.txt package/
+cp -r ../../backend/app ../build/package/
+cp ../../backend/requirements.txt ../build/package/
 
 # Create zip
-cd package
-zip -r ../stock-analyzer-lambda.zip . -x "*.pyc" "*.pyo" "__pycache__/*"
-cd ..
+cd ../build/package
+zip -r ../../stock-analyzer-lambda.zip . -x "*.pyc" "*.pyo" "__pycache__/*"
+cd ../..
 
 PACKAGE_SIZE=$(du -h stock-analyzer-lambda.zip | cut -f1)
 echo "✅ Application package created: $PACKAGE_SIZE"
@@ -163,7 +171,7 @@ echo "  - API Gateway: ~$4 (1M requests/month)"
 # Clean up local files
 echo "🧹 Cleaning up local files..."
 rm -f stock-analyzer-layer.zip stock-analyzer-lambda.zip
-rm -rf layer package
+rm -rf ../build
 
 echo "✅ Deployment cleanup completed"
 
@@ -174,7 +182,7 @@ echo "🔄 Setting up weekly reconciliation monitoring..."
 # Create S3 prefix for reconciliation data
 echo "📁 Creating reconciliation data structure..."
 aws s3api put-object \
-    --bucket "7h-stock-analyzer-${ENVIRONMENT}" \
+    --bucket "$S3_BUCKET_NAME_PROD" \
     --key "recon/.gitkeep" \
     --content-type "application/octet-stream" \
     --region $AWS_REGION || echo "ℹ️  Recon directory already exists"
@@ -205,7 +213,7 @@ if [ -n "$API_URL" ]; then
     echo "  📊 Data: Tracks profit targets vs stop losses"
     echo "  📈 Metrics: Days to target, success rates, performance by type"
     echo "  🔗 Endpoint: $API_URL/recon/summary"
-    echo "  🗂️  Storage: s3://7h-stock-analyzer-${ENVIRONMENT}/recon/daily/"
+    echo "  🗂️  Storage: s3://$S3_BUCKET_NAME_PROD/recon/daily/"
     echo ""
     echo "🎯 To view reconciliation data:"
     echo "  curl -s $API_URL/recon/summary | jq ."

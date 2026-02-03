@@ -3,6 +3,14 @@ set -e
 
 echo "💰 AWS Cost Monitoring for 7H Stock Analyzer..."
 
+# Load environment variables
+if [ ! -f ../.env.local ]; then
+    echo "❌ .env.local not found. Please create .env.local with AWS configuration."
+    exit 1
+fi
+
+export $(grep -v '^#' ../.env.local | xargs)
+
 # Check if AWS CLI is configured
 if ! aws sts get-caller-identity &>/dev/null; then
     echo "❌ AWS CLI not configured. Please run 'aws configure' first."
@@ -76,10 +84,7 @@ get_s3_costs() {
     
     # Get storage metrics for each bucket
     for env in dev staging prod; do
-        bucket_name="7h-stock-analyzer-$env"
-        if [ "$env" = "prod" ]; then
-            bucket_name="7h-stock-analyzer"
-        fi
+        bucket_name="$S3_BUCKET_NAME_PROD"
         
         if aws s3 ls "s3://$bucket_name" &>/dev/null; then
             # Get bucket size

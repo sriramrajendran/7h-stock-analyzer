@@ -19,7 +19,7 @@ const Dashboard = ({ recommendations, loading, onRefresh, systemHealth }) => {
 
   const topRecommendations = recommendations.slice(0, 5)
   const avgScore = recommendations.length > 0 
-    ? (recommendations.reduce((sum, r) => sum + r.score, 0) / recommendations.length).toFixed(1)
+    ? (recommendations.reduce((sum, r) => sum + (r.score || 0), 0) / recommendations.length).toFixed(1)
     : 0
 
   const getRecommendationIcon = (recommendation) => {
@@ -267,7 +267,7 @@ const Dashboard = ({ recommendations, loading, onRefresh, systemHealth }) => {
                           <div className="text-gray-600 text-xs mb-1">Target Price</div>
                           <div className="font-bold text-lg text-blue-600">{formatPrice(rec.target_price)}</div>
                           <div className="text-xs text-gray-500">
-                            {((rec.target_price - rec.price) / rec.price * 100).toFixed(1)}% potential
+                            {rec.current_price ? ((rec.target_price - rec.current_price) / rec.current_price * 100).toFixed(1) : 'N/A'}% potential
                           </div>
                         </div>
                       )}
@@ -276,7 +276,7 @@ const Dashboard = ({ recommendations, loading, onRefresh, systemHealth }) => {
                           <div className="text-gray-600 text-xs mb-1">Stop Loss</div>
                           <div className="font-bold text-lg text-red-600">{formatPrice(rec.stop_loss)}</div>
                           <div className="text-xs text-gray-500">
-                            {((rec.price - rec.stop_loss) / rec.price * 100).toFixed(1)}% risk
+                            {rec.current_price ? ((rec.current_price - rec.stop_loss) / rec.current_price * 100).toFixed(1) : 'N/A'}% risk
                           </div>
                         </div>
                       )}
@@ -375,7 +375,7 @@ const Dashboard = ({ recommendations, loading, onRefresh, systemHealth }) => {
                   <div className="ml-6 text-center">
                     <div className="text-3xl font-bold text-gray-900 mb-1">#{index + 1}</div>
                     <div className="text-sm text-gray-600">Rank</div>
-                    <div className="text-xs text-gray-500 mt-1">Score: {rec.score.toFixed(2)}</div>
+                    <div className="text-xs text-gray-500 mt-1">Score: {rec.score ? rec.score.toFixed(2) : 'N/A'}</div>
                   </div>
                 </div>
               </div>
@@ -424,7 +424,7 @@ const Dashboard = ({ recommendations, loading, onRefresh, systemHealth }) => {
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-600">Avg Confidence</span>
-                  <span className="font-bold text-blue-600">{summaryStats.avgConfidence.toFixed(1)}/3.0</span>
+                  <span className="font-bold text-blue-600">{summaryStats.avgConfidence ? summaryStats.avgConfidence.toFixed(1) : 'N/A'}/3.0</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-600">Total Analyzed</span>
