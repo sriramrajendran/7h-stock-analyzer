@@ -1,492 +1,463 @@
-# 📈 7H Stock Analyzer
+# 🚀 7H Stock Analyzer - Enhanced Serverless Lambda Version
 
-![7H Stock Analyzer](doc/readme.png)
+A comprehensive serverless stock analysis system built with AWS Lambda, EventBridge, S3, and React. This enhanced version provides automated daily stock recommendations with advanced features including target prices, stop losses, confidence levels, reconciliation tracking, and complete monitoring.
 
-A Python application that provides AI-powered stock recommendations based on technical analysis parameters. The system analyzes multiple technical indicators including RSI, MACD, Moving Averages, Bollinger Bands, and more to generate buy/sell/hold recommendations.
-
-## Features
-
-- **Technical Indicators Analysis:**
-  - RSI (Relative Strength Index)
-  - MACD (Moving Average Convergence Divergence)
-  - Simple Moving Averages (SMA 20, 50, 200)
-  - Exponential Moving Averages (EMA 12, 26)
-  - Bollinger Bands
-  - Stochastic Oscillator
-  - Average True Range (ATR)
-  - On-Balance Volume (OBV)
-
-- **Recommendation Engine:**
-  - Generates BUY/SELL/HOLD recommendations based on multiple indicators
-  - Scoring system that weighs different technical signals
-  - Detailed reasoning for each recommendation
-
-- **Multiple Analysis Modes:**
-  - Single stock analysis
-  - Portfolio analysis with top BUY/SELL recommendations
-  - **Beautiful web interface** with real-time analysis
-
-## Installation
-
-1. **Navigate to the project directory:**
-   ```bash
-   cd ~/workspace/7H-tech-analyse
-   ```
-
-2. **Create a virtual environment (recommended):**
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
-3. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-## Quick Start
-
-### 🚀 Start the Web Application
-
-1. **Start the Flask server:**
-   ```bash
-   lsof -ti:80 | xargs kill
-   python3 app.py
-   ```
-
-2. **Open your browser** and navigate to:
-   ```
-   http://localhost:80
-   ```
-
-3. **Stop the server:** Press `Ctrl+C` in the terminal
-
-### 📊 Using the Web Interface
-
-#### Single Stock Analysis
-
-1. Click on the **"Single Stock"** tab
-2. Enter a stock symbol (e.g., `AAPL`, `MSFT`, `GOOGL`)
-3. Select a time period (default: 1 Year)
-4. Click **"Analyze Stock"**
-5. View detailed technical indicators and recommendations
-
-#### Portfolio Analysis
-
-1. Click on the **"Portfolio"** tab
-2. Enter multiple stock symbols (comma or space separated):
-   ```
-   AAPL, MSFT, GOOGL, TSLA, NVDA, AMZN, META, NFLX
-   ```
-3. Select time period and number of top recommendations
-4. Click **"Analyze Portfolio"**
-5. View:
-   - **Top BUY Recommendations** (sorted by score)
-   - **Top SELL Recommendations** (sorted by score)
-   - Portfolio summary statistics
-
-#### Import Portfolio from Brokerage
-
-1. Click on the **"Import Portfolio"** tab
-2. Export your portfolio as CSV from your brokerage:
-   - **Robinhood**: Export from Account → History → Export
-   - **E-Trade**: Export from Portfolio → Positions → Export
-   - **Other brokerages**: Use generic CSV format
-3. Upload the CSV file
-4. Select brokerage or choose "Auto-detect"
-5. Check "Save symbols to portfolio configuration" to update your portfolio
-6. Click **"Import Portfolio"**
-7. View imported holdings with:
-   - Total portfolio value and P&L
-   - Individual holding details
-   - Performance metrics
-
-### 💾 Persistent Data Storage
-
-The portfolio import system now includes persistent storage to keep your data available across Flask app restarts:
-
-#### **How It Works**
-- Imported portfolio data is saved to `input/portfolio_data.json`
-- A human-readable CSV backup is created at `input/imported_portfolio.csv`
-- Data persists even when the Flask app restarts
-- Storage info includes import date, broker, and holdings count
-
-#### **Storage Options**
-- **Save portfolio data for persistence** (checked by default)
-  - Stores complete portfolio data with quantities and prices
-  - Enables portfolio summary and analysis features
-  - Survives app restarts and server reboots
-  
-- **Save symbols to portfolio configuration** (optional)
-  - Updates `input/config_portfolio.txt` with symbol list
-  - Enables technical analysis on imported symbols
-  - Compatible with existing portfolio analysis workflow
-
-#### **Storage Files**
-```
-input/
-├── portfolio_data.json       # Primary storage (JSON format)
-├── imported_portfolio.csv   # Human-readable backup
-└── config_portfolio.txt     # Symbol list for analysis
-```
-
-#### **API Endpoints for Storage**
-- `GET /api/portfolio_data` - Retrieve stored portfolio
-- `DELETE /api/portfolio_data` - Clear stored data
-- `POST /api/portfolio_config` - Update config from storage
-- `GET /api/portfolio_summary` - Portfolio summary with storage info
-
-### 📋 Supported CSV Formats
-
-#### Robinhood Format
-```csv
-symbol,quantity,average_buy_price,current_price,equity,gain_loss,gain_loss_pct
-AAPL,10,150.00,165.50,1655.00,155.00,10.33
-MSFT,5,250.00,280.75,1403.75,153.75,12.30
-```
-
-#### E-Trade Format
-```csv
-Symbol,Quantity,Price,Value,Cost Basis,Unrealized Gain/Loss
-AAPL,10,165.50,1655.00,1500.00,155.00
-MSFT,5,280.75,1403.75,1250.00,153.75
-```
-
-#### Generic CSV Format
-```csv
-Symbol,Quantity,Average Cost,Last Price
-AAPL,10,150.00,165.50
-MSFT,5,250.00,280.75
-```
-
-### 🎨 Web App Features
-
-- **Beautiful Modern UI**: Gradient background, smooth animations
-- **Real-time Analysis**: Results appear instantly via AJAX
-- **Responsive Design**: Works on desktop, tablet, and mobile
-- **Color-coded Recommendations**: 
-  - 🟢 Green for BUY
-  - 🔴 Red for SELL
-  - 🟡 Yellow for HOLD
-- **Detailed Indicators**: RSI, MACD, Moving Averages, Bollinger Bands
-- **Portfolio Insights**: Compare multiple stocks at once
-
-## Recommendation Scoring System
-
-The recommendation engine uses a scoring system:
-
-- **Score ≥ 5:** STRONG BUY
-- **Score 2-4:** BUY
-- **Score -1 to 1:** HOLD
-- **Score -4 to -2:** SELL
-- **Score ≤ -5:** STRONG SELL
-
-### Scoring Factors
-
-- **RSI:** +2 (oversold), -2 (overbought), +1 (neutral-bullish), -1 (neutral-bearish)
-- **MACD:** +2 (bullish crossover), -2 (bearish crossover)
-- **Moving Averages:** +1 per MA above price, -2 if below all MAs
-- **Golden/Death Cross:** +1 (golden), -1 (death)
-- **Bollinger Bands:** +1 (near lower), -1 (near upper)
-- **Stochastic:** +1 (oversold), -1 (overbought)
-- **Price Momentum:** +1 (strong positive), -1 (strong negative)
-
-## Project Structure
+## 🏗️ Enhanced Architecture
 
 ```
-7H-Stock-Analyzer/
-├── app.py               # Flask web application
-├── core/                # Core analysis engine
-│   ├── stock_analyzer.py
-│   ├── portfolio_forklift.py  # Portfolio import module
-│   └── portfolio_storage.py  # Persistent data storage
-├── requirements.txt     # Python dependencies
-├── input/               # Configuration and data files
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│  EventBridge    │───▶│   AWS Lambda     │───▶│   S3 Storage    │
+│   Cron Trigger  │    │ Enhanced Engine  │    │  (JSON + UI)    │
+└─────────────────┘    │  (FastAPI + TA)  │    └─────────────────┘
+                                │
+                                ▼
+                       ┌──────────────────┐
+                       │  Pushover API    │
+                       │  Smart Alerts    │
+                       └──────────────────┘
+                                │
+                                ▼
+                       ┌──────────────────┐
+                       │  Recon Service   │
+                       │  Performance     │
+                       │  Tracking        │
+                       └──────────────────┘
+```
+
+## 🌟 Enhanced Features
+
+### Backend (Enhanced Lambda)
+- **Automated Analysis**: Daily cron triggers at market open (9:30 AM EST weekdays)
+- **Manual Triggers**: `/run-now` API endpoint for on-demand analysis
+- **Enhanced Technical Analysis**: RSI, MACD, Moving Averages, Bollinger Bands, Stochastic, ATR, OBV
+- **Target Price System**: Automatic calculation of target and stop-loss prices based on recommendation strength
+- **Confidence Levels**: High/Medium/Low confidence scoring with detailed reasoning
+- **Technical Indicators Tracking**: List all indicators used for each recommendation
+- **Reconciliation Service**: Daily tracking of target/stop-loss achievement with performance metrics
+- **Purge Service**: Automatic cleanup of old data (1000+ days) with dry-run capability
+- **Enhanced Configuration**: Full CRUD operations with validation, backup, and history
+- **Smart Notifications**: Target/stop-loss alerts with priority levels and detailed information
+- **Security Service**: API key management, access control, and request validation
+- **Chart Generation**: Automatic price chart generation for each recommendation
+- **Performance Analytics**: Detailed tracking of recommendation performance over time
+
+### Frontend (Enhanced React)
+- **Modern UI**: Built with React 18, Tailwind CSS, and responsive design
+- **Real-time Dashboard**: Latest recommendations with enhanced details, charts, and performance tracking
+- **Advanced Filtering**: Filter by confidence level, recommendation type, technical indicators
+- **Historical Analysis**: View past recommendations with recon data and performance metrics
+- **Configuration UI**: Manage stock symbols with validation, backup, and history tracking
+- **System Health**: Real-time system status and health monitoring
+- **Performance Summary**: Detailed analytics and recommendation distribution
+- **Chart Integration**: Interactive price charts with technical overlays
+- **Recon Dashboard**: View target/stop-loss achievements and performance analytics
+
+### Storage (Enhanced S3)
+- **Latest Data**: `data/latest.json` - Current recommendations with enhanced fields
+- **Historical Data**: `data/daily/YYYY-MM-DD.json` - Immutable daily snapshots
+- **Recon Data**: `recon/daily/YYYY-MM-DD.json` - Daily reconciliation tracking
+- **Chart Storage**: `charts/` - Generated price charts for recommendations
+- **Configuration**: `config/` - Stock lists with backup and versioning
+- **Security**: Enhanced bucket policies, encryption, and access controls
+- **Lifecycle Management**: Automatic cleanup and cost optimization
+- **Static Website**: Serves the React frontend with enhanced security
+
+## 📦 Project Structure
+
+```
+7h-stock-analyzer/
+├── backend/                    # Enhanced Lambda function code
+│   ├── app/
+│   │   ├── main.py            # FastAPI + Lambda handler
+│   │   ├── engine/
+│   │   │   └── enhanced_recommender.py # Enhanced technical analysis
+│   │   ├── services/
+│   │   │   ├── s3_store.py    # Enhanced S3 storage service
+│   │   │   ├── pushover.py    # Enhanced notification service
+│   │   │   ├── config_manager.py # Enhanced configuration management
+│   │   │   ├── recon_service.py # Reconciliation service
+│   │   │   ├── purge_service.py # Data cleanup service
+│   │   │   ├── chart_service.py # Chart generation service
+│   │   │   └── security_service.py # Security and API management
+│   │   ├── config.py          # Application configuration
+│   │   ├── models.py          # Enhanced Pydantic models
+│   │   └── __init__.py
+│   ├── requirements.txt       # Python dependencies
+│   └── local_run.py          # Local development runner
+├── frontend/                  # Enhanced React web application
+│   ├── src/
+│   │   ├── pages/            # Enhanced page components
+│   │   │   ├── Dashboard.jsx  # Enhanced dashboard with charts
+│   │   │   ├── History.jsx    # Historical analysis with recon data
+│   │   │   └── Config.jsx     # Enhanced configuration management
+│   │   ├── components/
+│   │   │   ├── RecommendationTable.jsx # Enhanced table
+│   │   │   ├── PriceChart.jsx # Chart component
+│   │   │   └── PerformanceSummary.jsx # Performance analytics
+│   │   ├── services/
+│   │   │   └── api.js        # Enhanced API service layer
+│   │   ├── App.jsx           # Enhanced main app component
+│   │   ├── main.jsx          # React entry point
+│   │   └── index.css         # Tailwind styles
+│   ├── package.json          # Node.js dependencies
+│   ├── vite.config.js        # Vite configuration
+│   └── tailwind.config.js    # Tailwind configuration
+├── infra/
+│   └── template.yaml         # Enhanced AWS SAM infrastructure
+├── input/                    # Configuration files
 │   ├── config_portfolio.txt
 │   ├── config_watchlist.txt
 │   ├── config_us_stocks.txt
-│   ├── config_etfs.txt
-│   ├── portfolio_data.json     # Persistent portfolio storage
-│   └── imported_portfolio.csv  # CSV backup
-├── assets/              # Combined static files and templates
-│   ├── css/
-│   │   └── style.css
-│   ├── js/
-│   │   └── main.js
-│   ├── base.html
-│   └── index.html
-├── tests/               # Test suite
-│   ├── test_stock_analyzer.py
-│   ├── test_flask_app.py
-│   ├── test_recommendation_engine.py
-│   ├── test_integration.py
-│   └── test_portfolio_forklift.py  # Portfolio import tests
-├── temp/                # Temporary file uploads
-├── robinhood_export_guide.py    # Robinhood export instructions
-├── doc/
-│   └── readme.png      # Branding image
-└── README.md           # This file
+│   └── config_etfs.txt
+├── doc/                      # Specifications
+│   ├── spec_lambda.md
+│   └── spec_lambda_enhance.md
+└── README.md                 # This file
 ```
 
-## Dependencies
+## 🚀 Quick Start
 
-- **yfinance:** Yahoo Finance data fetching
-- **pandas:** Data manipulation
-- **numpy:** Numerical operations
-- **ta:** Technical analysis library
-- **flask:** Web framework for browser interface
+### Prerequisites
+- AWS CLI configured with appropriate permissions
+- SAM CLI installed (`pip install aws-sam-cli`)
+- Node.js 18+ and npm
+- Python 3.10+
 
-## Important Notes
+### 1. Deploy Infrastructure
 
-⚠️ **Disclaimer:** This tool is for educational and informational purposes only. Stock recommendations are based solely on technical analysis and should not be considered as financial advice. Always do your own research and consult with a financial advisor before making investment decisions.
-
-- Stock data is fetched from Yahoo Finance (free, but may have rate limits)
-- Requires internet connection
-- Historical data availability depends on the stock exchange
-- Technical analysis is just one aspect of stock evaluation
-
-## Tips
-
-- Use the portfolio analysis for comparing multiple stocks
-- Higher scores = Better BUY opportunities
-- Lower (negative) scores = Consider SELL
-- Check the reasoning for each recommendation
-
-## Troubleshooting
-
-**Issue:** "No data found for [SYMBOL]"
-- Verify the stock symbol is correct
-- Check if the stock is listed on a supported exchange
-- Ensure you have an internet connection
-
-**Issue:** "Limited data" warning
-- Try selecting a shorter period in the web interface
-- Some stocks may have limited trading history
-
-**Issue:** Import errors
-- Make sure all dependencies are installed: `pip install -r requirements.txt`
-- Ensure you're using Python 3.7 or higher
-
-**Issue:** Flask app won't start
-- Check if port 80 is already in use (the app uses port 80)
-- Try: `python3 app.py` (not `python app.py`)
-- Ensure Flask is installed: `pip install flask`
-- On macOS/Linux, you may need to use `sudo` to run on port 80, or change the port in `app.py` to 5000
-
-## Testing
-
-### 🧪 Run Test Suite
 ```bash
-# Install all dependencies (includes testing)
+# Navigate to project directory
+cd 7h-stock-analyzer
+
+# Deploy with AWS SAM (guided mode for first time)
+sam deploy --guided
+
+# Note your API Gateway URL and S3 bucket URL from the output
+```
+
+### 2. Configure Environment Variables
+
+Set these in the Lambda function console or via SAM parameters:
+- `PUSHOVER_TOKEN`: Your Pushover app token (optional)
+- `PUSHOVER_USER`: Your Pushover user key (optional)
+- `S3_BUCKET_NAME`: Your S3 bucket name (auto-configured)
+- `ENABLE_NOTIFICATIONS`: Set to "true" to enable Pushover alerts
+
+### 3. Build and Deploy Frontend
+
+```bash
+# Navigate to frontend
+cd frontend
+
+# Install dependencies
+npm install
+
+# Build for production
+npm run build
+
+# Upload to S3 (replace with your bucket name from deployment)
+aws s3 sync dist/ s3://your-bucket-name/ --delete
+```
+
+### 4. Test the Application
+
+1. **Health Check**: `https://your-api-gateway-url.com/health`
+2. **Manual Run**: `POST https://your-api-gateway-url.com/run-now`
+3. **Web Interface**: `http://your-bucket-name.s3-website-us-east-1.amazonaws.com`
+
+## 🔧 Configuration
+
+### Stock Lists Management
+
+Update stock symbols via API or edit files in `input/`:
+
+```bash
+# Update portfolio via API
+curl -X POST https://your-api-gateway-url.com/config/update \
+  -H "Content-Type: application/json" \
+  -d '{
+    "config_type": "portfolio",
+    "symbols": ["AAPL", "MSFT", "GOOGL", "AMZN"],
+    "backup": true
+  }'
+
+# Get all configurations
+curl https://your-api-gateway-url.com/config
+
+# Validate symbols
+curl -X POST https://your-api-gateway-url.com/config/validate \
+  -H "Content-Type: application/json" \
+  -d '{"symbols": ["AAPL", "INVALID", "MSFT"]}'
+```
+
+### Pushover Notifications Setup (Optional)
+
+1. Create an app at [Pushover.net](https://pushover.net/)
+2. Get your app token and user key
+3. Set environment variables in Lambda function
+4. Enable notifications with `ENABLE_NOTIFICATIONS=true`
+
+### Cron Schedule
+
+Default: Weekdays at 9:30 AM EST (14:30 UTC)
+```yaml
+Schedule: cron(30 14 ? * MON-FRI *)
+```
+
+Modify in `infra/template.yaml` if needed.
+
+## 📊 Enhanced API Endpoints
+
+### Core Endpoints
+- `GET /health` - Enhanced health check with system status
+- `POST /run-now` - Trigger manual analysis with enhanced results
+- `GET /recommendations` - Get latest recommendations with enhanced fields
+- `GET /history/{date}` - Get historical data with recon information
+
+### Enhanced Configuration Endpoints
+- `GET /config/{type}` - Get configuration with metadata
+- `GET /config` - Get all configurations with summary
+- `POST /config/update` - Update configuration with validation and backup
+- `POST /config/validate` - Validate stock symbols with detailed feedback
+- `POST /config/sync` - Sync S3 configs to local files
+- `GET /config/history/{type}` - Get configuration change history
+
+### New Management Endpoints
+- `POST /recon/run` - Trigger manual reconciliation
+- `GET /recon/summary` - Get recon performance summary
+- `POST /purge/run` - Run data cleanup with dry-run option
+- `GET /purge/stats` - Get storage statistics
+- `POST /security/api-keys` - Generate new API key
+- `GET /security/api-keys` - List API keys
+- `POST /charts/generate` - Generate price charts
+
+### Notification Endpoints
+- `POST /notifications/test` - Test notification system
+- `POST /notifications/target-alert` - Send target achievement alert
+- `POST /notifications/stop-loss-alert` - Send stop loss alert
+- `GET /notifications/stats` - Get notification statistics
+
+## 🎯 Enhanced Recommendation Logic
+
+### Target Price Calculation
+- **Strong Buy**: Target +20%, Stop Loss -5%
+- **Buy**: Target +10%, Stop Loss -5%
+- **Hold**: Target 0%, Stop Loss -5%
+- **Sell**: Target -5%, Stop Loss +5%
+- **Strong Sell**: Target -20%, Stop Loss +5%
+
+### Confidence Level Calculation
+- **High**: Score ≥ 0.8 + indicator consistency ≥ 0.8
+- **Medium**: Score 0.6-0.8 + indicator consistency 0.6-0.8
+- **Low**: Score < 0.6 or indicator consistency < 0.6
+
+### Enhanced Scoring System
+- **RSI**: +2 (oversold <30), -2 (overbought >70), +1 (favorable), -1 (unfavorable)
+- **MACD**: +1 (bullish crossover), -1 (bearish crossover)
+- **Moving Averages**: +1 per MA above price (20, 50, 200-day)
+- **Price Momentum**: +0.5 (positive weekly/monthly change)
+- **Indicator Consistency**: Bonus for aligned signals
+- **Total Score**: Determines recommendation strength and confidence
+
+### Recommendation Types
+- **Score ≥ 0.7**: Strong Buy
+- **Score 0.3-0.7**: Buy
+- **Score -0.3 to 0.3**: Hold
+- **Score -0.7 to -0.3**: Sell
+- **Score ≤ -0.7**: Strong Sell
+
+### Technical Indicators Used
+- **RSI**: Momentum oscillator
+- **MACD**: Trend following indicator
+- **SMA (20, 50)**: Moving averages
+- **Bollinger Bands**: Volatility bands
+- **Volume SMA**: Volume analysis
+- **Price Action**: Current vs historical patterns
+
+## 💰 Enhanced Cost Estimate
+
+Monthly costs (typical usage with enhanced features):
+- **Lambda**: ~$0.08 (enhanced processing, 1024MB avg)
+- **EventBridge**: $0.00
+- **API Gateway**: ~$0.02 (enhanced endpoints)
+- **S3**: ~$0.08 (charts, recon data, enhanced storage)
+- **SNS**: ~$0.01 (enhanced alarms)
+- **CloudWatch**: ~$0.02 (enhanced monitoring)
+- **Pushover**: Depends on plan (free tier available)
+- **Total**: <$0.25/month
+
+### Cost Optimization Features
+- **Lifecycle Policies**: Automatic cleanup of old data
+- **Reserved Concurrency**: Control Lambda costs
+- **Data Compression**: Optimized JSON storage
+- **Smart Caching**: Reduce S3 requests
+- **Efficient Charts**: Optimized image generation
+
+## 🧪 Local Development
+
+### Backend Testing
+
+```bash
+cd backend
+
+# Install dependencies
 pip install -r requirements.txt
 
 # Run all tests
-pytest
-
-# Run with verbose output
-pytest -v
-
-# Run specific test categories
-pytest tests/test_stock_analyzer.py -v  # Core functionality
-pytest tests/test_flask_app.py -v       # Web application
-pytest tests/test_recommendation_engine.py -v  # Recommendation logic
-pytest tests/test_integration.py -v         # Integration tests
-```
-
-### 📋 Test Coverage
-
-#### **Core Functionality** (`test_stock_analyzer.py`)
-- ✅ StockAnalyzer initialization
-- ✅ Technical indicators calculation (RSI, MACD, SMA, EMA, Bollinger Bands)
-- ✅ Fundamental indicators fetching (P/E, market cap, dividend yield)
-- ✅ Error handling for invalid symbols
-- ✅ Edge cases and data validation
-
-#### **Web Application** (`test_flask_app.py`)
-- ✅ Page loading (Portfolio, Watchlist, Market, ETF)
-- ✅ API endpoints (`/api/config_stocks`, `/analyze_portfolio`, `/analyze_market`, `/analyze_etf`)
-- ✅ Form validation and submission
-- ✅ Error handling for malformed requests
-- ✅ Static file serving (CSS, JavaScript)
-- ✅ Invalid endpoint handling (404 errors)
-
-#### **Recommendation Engine** (`test_recommendation_engine.py`)
-- ✅ STRONG BUY conditions (oversold RSI, bullish MACD, golden cross)
-- ✅ STRONG SELL conditions (overbought RSI, bearish MACD, death cross)
-- ✅ HOLD recommendations (neutral indicators)
-- ✅ RSI extreme values (very oversold/overbought)
-- ✅ Golden/Death cross detection
-- ✅ Bollinger Bands signals (price near upper/lower bands)
-- ✅ MACD signal interpretation
-- ✅ Reasoning quality and explanations
-
-#### **Integration Tests** (`test_integration.py`)
-- ✅ Configuration file loading (portfolio, watchlist, ETF, US stocks)
-- ✅ Requirements file validation
-- ✅ Template file existence and content
-- ✅ Static file availability
-- ✅ Project structure integrity
-
-### 🎯 Critical Functionality Protected
-
-These tests ensure that core functionality remains intact during development:
-
-**🔧 Analysis Engine**: StockAnalyzer class, indicator calculations, recommendation generation
-**🌐 Web Interface**: All pages load, APIs respond, forms work
-**📊 Decision Logic**: Buy/sell/hold recommendations are accurate
-**🔗 Integration**: Configuration files, templates, static assets function properly
-
-### 🚀 Before Deployment
-
-Always run these tests before deploying changes:
-```bash
-# Clear pytest cache (if test discovery issues occur)
-rm -rf .pytest_cache
-
-# Full test suite (recommended)
-pytest tests/ -v
-
-# Quick critical tests (faster)
-pytest tests/test_stock_analyzer.py tests/test_flask_app.py -v
-```
-
-### 🔧 Troubleshooting Test Issues
-
-If pytest can't discover tests, try:
-```bash
-# Clear pytest cache
-rm -rf .pytest_cache
+python local_run.py --test all
 
 # Run specific test
-python -m pytest tests/test_integration.py::TestIntegration::test_static_files_exist -v
+python local_run.py --test engine
+python local_run.py --test s3
+python local_run.py --test pushover
 ```
 
-## 🚨 Automated Alerts (Pushover)
+### Frontend Development
 
-The app can send **iPhone notifications** via Pushover when new BUY signals are detected for your portfolio or ETFs.
+```bash
+cd frontend
 
-### Setup
+# Install dependencies
+npm install
 
-1. **Copy the example environment file:**
-   ```bash
-   cp .env.example .env
-   ```
+# Start development server
+npm run dev
 
-2. **Edit `.env` with your Pushover credentials:**
-   ```env
-   ALERTS_ENABLE=true
-   PUSHOVER_APP_TOKEN=your_app_token_here
-   PUSHOVER_USER_KEY=your_user_key_here
-   ```
+# Build for production
+npm run build
 
-   - Get your tokens from [Pushover.net](https://pushover.net/)
-   - `PUSHOVER_APP_TOKEN`: Create an app on Pushover
-   - `PUSHOVER_USER_KEY`: Your user key on Pushover
-
-3. **Optional: Customize alert behavior** (see `.env.example` for all options):
-   ```bash
-   # Minimum score for alerts (default: 3)
-   ALERT_MARKET_MIN_SCORE=3
-   ALERT_ETF_MIN_SCORE=3
-
-   # Portfolio-only market alerts (default: true)
-   ALERT_MARKET_PORTFOLIO_ONLY=true
-
-   # How many top results to consider (default: 10)
-   ALERT_MARKET_TOP_N=10
-   ALERT_ETF_TOP_N=10
-
-   # ETF daily run time (default: 08:00)
-   ALERT_ETF_RUN_HOUR=8
-   ALERT_ETF_RUN_MINUTE=0
-   ```
-
-   **Full `.env.example` for reference:**
-   ```bash
-   # Alert Configuration
-   # Copy this file to .env and fill in your Pushover credentials
-   # Required for iPhone notifications via Pushover
-
-   ALERTS_ENABLE=true
-   PUSHOVER_APP_TOKEN=your_app_token_here
-   PUSHOVER_USER_KEY=your_user_key_here
-
-   # Optional: customize thresholds and behavior
-   ALERT_API_BASE_URL=http://127.0.0.1:80
-   ALERT_MARKET_MIN_SCORE=3
-   ALERT_MARKET_PORTFOLIO_ONLY=true
-   ALERT_MARKET_TOP_N=10
-   ALERT_MARKET_PERIOD=1y
-
-   ALERT_ETF_ENABLED=true
-   ALERT_ETF_MIN_SCORE=3
-   ALERT_ETF_TOP_N=10
-   ALERT_ETF_PERIOD=1y
-   ALERT_ETF_RUN_HOUR=8
-   ALERT_ETF_RUN_MINUTE=0
-
-   # Optional: log to file (defaults to /tmp/)
-   # ALERT_LOG_FILE=/path/to/alerts.log
-   ```
-
-4. **Restart the Flask app** to enable alerts.
-
-### How It Works
-
-- **Market alerts**: Run every hour during US market hours (9:30 AM–4:00 PM ET)
-  - Only BUY signals with score ≥ 3
-  - Filters to symbols in your portfolio (`input/config_portfolio.txt`)
-  - Sends notification for *new* signals only (deduped)
-
-- **ETF alerts**: Run daily at 8:00 AM local time
-  - Only BUY signals with score ≥ 3
-  - Sends notification for *new* ETF signals only
-
-### Optional Customization
-
-Add to `.env` to tune behavior:
-
-```env
-# Minimum score for alerts (default: 3)
-ALERT_MARKET_MIN_SCORE=3
-ALERT_ETF_MIN_SCORE=3
-
-# Portfolio-only market alerts (default: true)
-ALERT_MARKET_PORTFOLIO_ONLY=true
-
-# How many top results to consider (default: 10)
-ALERT_MARKET_TOP_N=10
-ALERT_ETF_TOP_N=10
-
-# ETF daily run time (default: 08:00)
-ALERT_ETF_RUN_HOUR=8
-ALERT_ETF_RUN_MINUTE=0
-
-# Optional: log alerts to a file
-ALERT_LOG_FILE=/path/to/alerts.log
+# Preview build locally
+npm run preview
 ```
 
-### State & Deduplication
+## 📈 Enhanced Monitoring and Logging
 
-- Alert state is stored in `input/.alerts_state.json` (auto-created)
-- Only *new* signals trigger notifications
-- State persists across app restarts
+### CloudWatch Integration
+- **Enhanced Lambda Logs**: Structured logging with correlation IDs
+- **Advanced Alarms**: Error rates, duration, costs, and performance metrics
+- **SNS Notifications**: Multi-channel alerts with filtering
+- **Custom Metrics**: Recommendation counts, confidence levels, recon performance
+- **Dashboard**: Pre-built CloudWatch dashboard for system overview
 
-## Future Enhancements
+### Enhanced Log Locations
+- Lambda: `/aws/lambda/stock-analyzer-function`
+- API Gateway: Enhanced request/response logging
+- S3: Access logs with detailed tracking
+- Recon: Separate log group for reconciliation tracking
+- Charts: Log group for chart generation metrics
 
-Potential features to add:
-- Support for more technical indicators
-- Backtesting capabilities
-- Email/SMS alerts
-- Database storage for historical analysis
-- Integration with trading APIs
-- Chart visualizations
-- Export results to CSV/PDF
+### Performance Monitoring
+- **Recommendation Accuracy**: Track target/stop-loss achievement
+- **System Performance**: Lambda duration and memory usage
+- **Data Quality**: Validation and error tracking
+- **User Analytics**: API usage patterns and popular features
 
-## License
+## 🔒 Enhanced Security
 
-This project is provided as-is for educational purposes.
+- **IAM Roles**: Least privilege principle with enhanced policies
+- **S3 Security**: Bucket encryption, versioning, and access controls
+- **API Gateway**: Enhanced CORS, rate limiting, and request validation
+- **API Key Management**: Secure key generation and rotation
+- **Environment Variables**: Encrypted storage for sensitive data
+- **VPC Isolation**: Optional VPC deployment for enhanced security
+- **Data Encryption**: AES-256 encryption for all S3 data
+- **Access Logging**: Comprehensive audit trail
+- **Input Validation**: Sanitization and validation of all inputs
 
-## Contributing
+## 🚨 Important Notes
 
-Feel free to fork, modify, and improve this project according to your needs!
+⚠️ **Disclaimer**: This tool is for educational purposes only. Stock recommendations are based on technical analysis and should not be considered financial advice. Always do your own research and consult with a financial advisor.
+
+- **Data Source**: Yahoo Finance (free, rate-limited)
+- **Analysis**: Technical indicators only (no fundamental analysis)
+- **Recommendations**: Use as one input among many for investment decisions
+- **Market Hours**: Analysis runs during market hours for best data quality
+
+## 🔄 Updates and Maintenance
+
+### Updating Stock Lists
+1. Use the Configuration UI in the web app
+2. Update files in `input/` and sync via `/config/sync` endpoint
+3. Call `/config/update` endpoint directly
+
+### Updating Lambda Code
+```bash
+# Build and deploy
+sam build
+sam deploy
+```
+
+### Updating Frontend
+```bash
+cd frontend
+npm run build
+aws s3 sync dist/ s3://your-bucket-name/ --delete
+```
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+**Lambda Timeout**
+- Increase timeout in `template.yaml` (max 15 minutes)
+- Reduce number of symbols in configuration
+- Check for Yahoo Finance API rate limits
+
+**S3 Access Issues**
+- Verify bucket policy allows public read for website
+- Check IAM permissions for Lambda function
+- Ensure CORS configuration is correct
+
+**Frontend Not Loading**
+- Check S3 bucket website configuration
+- Verify build files uploaded to correct bucket
+- Check browser console for JavaScript errors
+
+**Missing Recommendations**
+- Check Lambda logs in CloudWatch for errors
+- Verify stock symbols are valid and traded
+- Check Yahoo Finance API availability
+
+**Pushover Not Working**
+- Verify PUSHOVER_TOKEN and PUSHOVER_USER are set
+- Check Pushover app is enabled
+- Test with `/config/validate` endpoint first
+
+## 📞 Support and Debugging
+
+For issues and questions:
+1. Check CloudWatch logs for Lambda errors
+2. Verify API endpoints with health check
+3. Test configuration with local development setup
+4. Review SAM template for deployment issues
+
+## 🛣️ Enhanced Roadmap
+
+### Implemented Features ✅
+- [x] Enhanced recommendation engine with target prices
+- [x] Confidence level scoring system
+- [x] Reconciliation service for performance tracking
+- [x] Chart generation for price analysis
+- [x] Enhanced security with API key management
+- [x] Purge service for data lifecycle management
+- [x] Advanced monitoring and alerting
+- [x] Enhanced frontend with real-time updates
+
+### Future Enhancements 🚀
+- **Machine Learning Integration**: Advanced prediction models
+- **Backtesting Engine**: Historical performance analysis
+- **Portfolio Management**: Track multiple portfolios
+- **Real-time WebSocket**: Live price updates
+- **Mobile Application**: React Native mobile app
+- **Advanced Charting**: TradingView integration
+- **Social Features**: Community recommendations
+- **Multi-market Support**: International exchanges
+- **Alternative Data**: News sentiment, social media analysis
+- **Risk Management**: Portfolio risk analytics
+- **Automated Trading**: Broker integration (paper trading)
+- **Custom Indicators**: User-defined technical indicators
+- **API Marketplace**: Third-party integrations
+
+## 📄 License
+
+This project is provided as-is for educational purposes. Feel free to fork, modify, and improve according to your needs.

@@ -61,6 +61,10 @@ input/*.json
 data/
 cache/
 
+# Local development files
+local_config/
+s3_data/
+
 # Jupyter Notebook
 .ipynb_checkpoints
 

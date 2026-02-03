@@ -1,0 +1,21 @@
+# Core dependencies
+fastapi==0.104.1
+mangum==0.17.0
+pydantic==2.5.0
+uvicorn[standard]==0.24.0
+
+# Data analysis
+yfinance==0.2.18
+pandas==2.1.4
+numpy==1.25.2
+ta==0.10.2
+
+# AWS SDK
+boto3==1.34.0
+botocore==1.34.0
+
+# HTTP requests
+requests==2.31.0
+
+# Utilities
+python-dateutil==2.8.2
