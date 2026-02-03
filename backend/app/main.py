@@ -114,6 +114,16 @@ def run_reconciliation(auth: bool = verify_api_key):
         raise HTTPException(status_code=500, detail=f"Failed to run reconciliation: {str(e)}")
 
 
+@app.get("/history/{date}/enhanced")
+def get_historical_recommendations_enhanced(date: str, auth: bool = verify_api_key):
+    """Get historical recommendations with reconciliation data for a specific date (YYYY-MM-DD)"""
+    try:
+        from app.services.s3_store import get_historical_results
+        return get_historical_results(date, include_recon=True)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get historical data: {str(e)}")
+
+
 @app.get("/health")
 def health_check():
     """Health check endpoint - optimized for minimal cost"""

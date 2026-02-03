@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { s3Api } from '../services/api'
-import RecommendationTable from '../components/RecommendationTable'
+import EnhancedRecommendationTable from '../components/EnhancedRecommendationTable'
 
 const History = () => {
   const [availableDates, setAvailableDates] = useState([])
@@ -40,7 +40,8 @@ const History = () => {
     try {
       setLoading(true)
       setError(null)
-      const data = await s3Api.getHistoricalRecommendations(date)
+      // Use enhanced endpoint to get reconciliation data
+      const data = await s3Api.getHistoricalRecommendationsEnhanced(date)
       setHistoricalData(data)
     } catch (err) {
       setError(err.message)
@@ -124,7 +125,7 @@ const History = () => {
       {historicalData && (
         <div>
           {/* Summary */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             <div className="card">
               <div className="text-center">
                 <div className="text-3xl font-bold text-blue-600">{historicalData.count}</div>
@@ -149,6 +150,29 @@ const History = () => {
                 <div className="text-sm text-gray-600 mt-1">Analysis Time</div>
               </div>
             </div>
+
+            {/* Reconciliation Performance Summary */}
+            <div className="card">
+              <div className="text-center">
+                <div className="text-lg font-semibold text-gray-900">
+                  {(() => {
+                    const recs = historicalData.recommendations || []
+                    const targetsMet = recs.filter(r => r.result_status === 'target_met').length
+                    const stopLossHit = recs.filter(r => r.result_status === 'stop_loss_hit').length
+                    const inTransit = recs.filter(r => r.result_status === 'in_transit').length
+                    
+                    return (
+                      <div>
+                        <div className="text-green-600 font-bold">{targetsMet} ✅</div>
+                        <div className="text-red-600">{stopLossHit} ❌</div>
+                        <div className="text-yellow-600">{inTransit} ⏳</div>
+                      </div>
+                    )
+                  })()}
+                </div>
+                <div className="text-sm text-gray-600 mt-1">Performance Results</div>
+              </div>
+            </div>
           </div>
 
           {/* Recommendations Table */}
@@ -158,7 +182,7 @@ const History = () => {
             </h2>
             
             {historicalData.recommendations && historicalData.recommendations.length > 0 ? (
-              <RecommendationTable recommendations={historicalData.recommendations} />
+              <EnhancedRecommendationTable recommendations={historicalData.recommendations} />
             ) : (
               <div className="card">
                 <div className="text-center py-12">

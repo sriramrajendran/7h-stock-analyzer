@@ -129,23 +129,81 @@ def get_latest_results() -> Dict[str, Any]:
         return {'error': f'Error: {str(e)}'}
 
 
-def get_historical_results(date: str) -> Dict[str, Any]:
+def get_historical_results(date: str, include_recon: bool = False) -> Dict[str, Any]:
     """
     Get historical recommendations for a specific date
     
     Args:
         date: Date string in YYYY-MM-DD format
+        include_recon: Whether to include reconciliation data
     """
     try:
         # Validate date format
         datetime.strptime(date, '%Y-%m-%d')
         
+        # Get the main historical data
         response = s3_client.get_object(
             Bucket=BUCKET_NAME,
             Key=f'data/daily/{date}.json'
         )
         
         data = json.loads(response['Body'].read().decode('utf-8'))
+        
+        # If reconciliation data is requested, try to enhance the recommendations
+        if include_recon and 'recommendations' in data:
+            # Try to get reconciliation data for the same date
+            try:
+                recon_response = s3_client.get_object(
+                    Bucket=BUCKET_NAME,
+                    Key=f'recon/daily/{date}.json'
+                )
+                recon_data = json.loads(recon_response['Body'].read().decode('utf-8'))
+                
+                # Merge reconciliation data into recommendations
+                recon_lookup = {r['symbol']: r for r in recon_data.get('reconciliations', [])}
+                
+                for rec in data['recommendations']:
+                    symbol = rec.get('symbol')
+                    if symbol in recon_lookup:
+                        recon_info = recon_lookup[symbol]
+                        rec['result_status'] = recon_info.get('result_status', 'in_transit')
+                        rec['days_to_target_result'] = recon_info.get('days_to_target')
+                        rec['recon_current_price'] = recon_info.get('current_price')
+                        rec['recon_days_elapsed'] = recon_info.get('days_elapsed')
+                        rec['target_met'] = recon_info.get('target_met', False)
+                        rec['stop_loss_hit'] = recon_info.get('stop_loss_hit', False)
+                    else:
+                        # Default values if no recon data found
+                        rec['result_status'] = 'in_transit'
+                        rec['days_to_target_result'] = None
+                        rec['recon_current_price'] = rec.get('price')  # Use original price
+                        rec['recon_days_elapsed'] = 0
+                        rec['target_met'] = False
+                        rec['stop_loss_hit'] = False
+                        
+            except ClientError as e:
+                if e.response['Error']['Code'] == 'NoSuchKey':
+                    # No reconciliation data available, add default fields
+                    for rec in data['recommendations']:
+                        rec['result_status'] = 'in_transit'
+                        rec['days_to_target_result'] = None
+                        rec['recon_current_price'] = rec.get('price')
+                        rec['recon_days_elapsed'] = 0
+                        rec['target_met'] = False
+                        rec['stop_loss_hit'] = False
+                else:
+                    raise
+            except Exception as e:
+                logger.warning(f"Error merging recon data: {e}")
+                # Add default fields on error
+                for rec in data['recommendations']:
+                    rec['result_status'] = 'in_transit'
+                    rec['days_to_target_result'] = None
+                    rec['recon_current_price'] = rec.get('price')
+                    rec['recon_days_elapsed'] = 0
+                    rec['target_met'] = False
+                    rec['stop_loss_hit'] = False
+        
         return data
         
     except ValueError:

@@ -68,12 +68,19 @@ class ReconService:
             # Check if target or stop loss was hit
             target_met = False
             stop_loss_hit = False
+            result_status = "in_transit"
+            days_to_target = None
             
             if recommendation.get('target_price'):
                 target_met = current_price >= recommendation['target_price']
+                if target_met:
+                    result_status = "target_met"
+                    days_to_target = days_elapsed
             
             if recommendation.get('stop_loss'):
                 stop_loss_hit = current_price <= recommendation['stop_loss']
+                if stop_loss_hit and not target_met:  # Stop loss takes precedence
+                    result_status = "stop_loss_hit"
             
             return ReconData(
                 symbol=recommendation['symbol'],
@@ -86,7 +93,9 @@ class ReconService:
                 target_met=target_met,
                 stop_loss_hit=stop_loss_hit,
                 recon_date=datetime.utcnow().isoformat(),
-                original_timestamp=recommendation['timestamp']
+                original_timestamp=recommendation['timestamp'],
+                result_status=result_status,
+                days_to_target=days_to_target
             )
             
         except Exception as e:
@@ -154,6 +163,8 @@ class ReconService:
                     rec['days_to_target'] = matching_recon.days_elapsed
                     rec['target_met'] = matching_recon.target_met
                     rec['stop_loss_hit'] = matching_recon.stop_loss_hit
+                    rec['result_status'] = matching_recon.result_status
+                    rec['days_to_target_result'] = matching_recon.days_to_target
                 
                 updated_recommendations.append(rec)
             

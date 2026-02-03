@@ -136,6 +136,9 @@ class ReconData:
     stop_loss_hit: bool
     recon_date: str
     original_timestamp: str
+    # Enhanced fields for historical display
+    result_status: str  # "target_met", "stop_loss_hit", "in_transit"
+    days_to_target: Optional[int] = None  # Days taken to reach target (if met)
 
 
 @dataclass

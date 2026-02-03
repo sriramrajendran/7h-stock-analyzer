@@ -67,6 +67,17 @@ export const s3Api = {
     return response.json()
   },
 
+  getHistoricalRecommendationsEnhanced: async (date) => {
+    // Always use local API for enhanced data (includes reconciliation)
+    const response = await fetch(`${API_BASE_URL}/history/${date}/enhanced`, {
+      headers: getHeaders()
+    })
+    if (!response.ok) {
+      throw new Error('Failed to fetch enhanced historical recommendations')
+    }
+    return response.json()
+  },
+
   listAvailableDates: async () => {
     // This would require a Lambda function to list S3 objects
     // For now, return a mock implementation
