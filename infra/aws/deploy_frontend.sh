@@ -80,8 +80,74 @@ echo "📤 Deploying to S3..."
 aws s3 sync dist/ "s3://$BUCKET_NAME/" \
     --delete
 
-# Set bucket policy for public read access
-echo "🔐 Setting bucket policy..."
+# Create CloudFront distribution if it doesn't exist
+echo "🌐 Setting up CloudFront distribution..."
+DISTRIBUTION_ID=$(aws cloudfront list-distributions \
+    --query "DistributionList.Items[?Comment=='$BUCKET_NAME frontend'].Id" \
+    --output text)
+
+if [ -z "$DISTRIBUTION_ID" ] || [ "$DISTRIBUTION_ID" = "None" ]; then
+    echo "🚀 Creating new CloudFront distribution..."
+    
+    # Create CloudFront distribution
+    DISTRIBUTION_ID=$(aws cloudfront create-distribution \
+        --distribution-config '{
+            "CallerReference": "'$BUCKET_NAME'-'$ENVIRONMENT'-'$RANDOM'",
+            "Comment": "'$BUCKET_NAME' frontend",
+            "DefaultRootObject": "index.html",
+            "Origins": {
+                "Quantity": 1,
+                "Items": [{
+                    "Id": "S3-'$BUCKET_NAME'",
+                    "DomainName": "'$BUCKET_NAME'.s3.'$AWS_REGION'.amazonaws.com",
+                    "S3OriginConfig": {
+                        "OriginAccessIdentity": ""
+                    }
+                }]
+            },
+            "DefaultCacheBehavior": {
+                "TargetOriginId": "S3-'$BUCKET_NAME'",
+                "ViewerProtocolPolicy": "redirect-to-https",
+                "TrustedSigners": {
+                    "Enabled": false,
+                    "Quantity": 0
+                },
+                "ForwardedValues": {
+                    "QueryString": false,
+                    "Cookies": {
+                        "Forward": "none"
+                    }
+                },
+                "MinTTL": 3600,
+                "DefaultTTL": 86400,
+                "MaxTTL": 31536000
+            },
+            "CacheBehaviors": {
+                "Quantity": 0
+            },
+            "Enabled": true,
+            "PriceClass": "PriceClass_100"
+        }' \
+        --query 'Distribution.Id' \
+        --output text)
+    
+    echo "✅ Created CloudFront distribution: $DISTRIBUTION_ID"
+    
+    # Wait for distribution to deploy
+    echo "⏳ Waiting for CloudFront distribution to deploy (this can take 15-20 minutes)..."
+    aws cloudfront wait distribution-deployed --id $DISTRIBUTION_ID
+else
+    echo "ℹ️  CloudFront distribution already exists: $DISTRIBUTION_ID"
+fi
+
+# Get CloudFront domain name
+CLOUDFRONT_DOMAIN=$(aws cloudfront get-distribution \
+    --id $DISTRIBUTION_ID \
+    --query 'Distribution.DomainName' \
+    --output text)
+
+# Update S3 bucket policy for CloudFront access
+echo "🔐 Updating S3 bucket policy for CloudFront..."
 aws s3api put-bucket-policy \
     --bucket "$BUCKET_NAME" \
     --policy '{
@@ -90,7 +156,9 @@ aws s3api put-bucket-policy \
             {
                 "Sid": "PublicReadGetObject",
                 "Effect": "Allow",
-                "Principal": "*",
+                "Principal": {
+                    "AWS": "arn:aws:cloudfront::'$(aws sts get-caller-identity --query Account --output text)'":originaccessidentity/'$(echo $CLOUDFRONT_DOMAIN | cut -d. -f1)'"
+                },
                 "Action": "s3:GetObject",
                 "Resource": "arn:aws:s3:::'$BUCKET_NAME'/*"
             }
@@ -117,11 +185,14 @@ cd ../..
 echo ""
 echo "🎉 Frontend deployment completed!"
 echo ""
-echo "🌐 S3 Website URL: http://$BUCKET_NAME.s3-website-$AWS_REGION.amazonaws.com"
+echo "🌐 CloudFront URL: https://$CLOUDFRONT_DOMAIN"
 echo "🪣 S3 Bucket: s3://$BUCKET_NAME"
+echo "📋 Distribution ID: $DISTRIBUTION_ID"
 echo ""
 echo "🧪 Test the deployment:"
-echo "  curl http://$BUCKET_NAME.s3-website-$AWS_REGION.amazonaws.com"
+echo "  curl https://$CLOUDFRONT_DOMAIN"
 echo ""
 echo "💡 To update content:"
 echo "  ./infra/aws/deploy_frontend.sh $ENVIRONMENT"
+echo ""
+echo "⚠️  Note: CloudFront may take a few minutes to propagate changes globally"

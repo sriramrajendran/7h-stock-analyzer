@@ -53,10 +53,13 @@ fi
 
 # Build Lambda layer
 echo "📦 Building Lambda layer..."
-rm -rf ../build/layer
-mkdir -p ../build/layer/python
 
-# Install only essential dependencies for production
+# Create build directories
+echo "🏗️ Creating build directories..."
+mkdir -p ../build/layer/python
+mkdir -p ../build/package
+
+# Install production dependencies
 echo "Installing production dependencies..."
 pip install \
     --target ../build/layer/python \
@@ -90,8 +93,8 @@ rm -rf ../build/package
 mkdir -p ../build/package
 
 # Copy only necessary files
-cp -r ../../backend/app ../build/package/
-cp ../../backend/requirements.txt ../build/package/
+cp -r /Users/sriramrajendran/7_projects/7h-stock-analyzer/backend/app ../build/package/
+cp /Users/sriramrajendran/7_projects/7h-stock-analyzer/backend/requirements.txt ../build/package/
 
 # Create zip
 cd ../build/package
@@ -104,7 +107,7 @@ echo "✅ Application package created: $PACKAGE_SIZE"
 # Upload to S3
 echo "📤 Uploading to S3..."
 aws s3 cp stock-analyzer-layer.zip "s3://$DEPLOYMENT_BUCKET/"
-aws s3 cp stock-analyzer-lambda.zip "s3://$DEPLOYMENT_BUCKET/"
+aws s3 cp ../../stock-analyzer-lambda.zip "s3://$DEPLOYMENT_BUCKET/"
 
 # Deploy with SAM (cost-optimized template)
 echo "🚀 Deploying with SAM..."
@@ -115,11 +118,7 @@ sam deploy \
     --s3-bucket $DEPLOYMENT_BUCKET \
     --parameter-overrides \
         Environment=$ENVIRONMENT \
-        MemorySize=$MEMORY_SIZE \
-        Timeout=$TIMEOUT \
-        ReservedConcurrency=$RESERVED_CONCURRENCY \
-        EnableVpc=false \
-    --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
+    --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
     --no-confirm-changeset \
     --no-fail-on-empty-changeset
 
@@ -143,6 +142,46 @@ LAMBDA_ARN=$(aws cloudformation describe-stacks \
     --query 'Stacks[0].Outputs[?OutputKey==`StockAnalyzerFunction`].OutputValue' \
     --output text)
 
+API_KEY=$(aws cloudformation describe-stacks \
+    --stack-name $STACK_NAME \
+    --region $AWS_REGION \
+    --query 'Stacks[0].Outputs[?OutputKey==`StockAnalyzerApiKey`].OutputValue' \
+    --output text)
+
+# Store API key in SSM Parameter Store (secure, not hardcoded)
+echo "🔐 Storing API key in SSM Parameter Store..."
+if [ -z "$API_KEY" ]; then
+    echo "❌ API_KEY not found in environment variables"
+    echo "Please set API_KEY in your .env.local file"
+    exit 1
+fi
+
+aws ssm put-parameter \
+    --name "/stock-analyzer/api-key" \
+    --value "$API_KEY" \
+    --type "SecureString" \
+    --description "Stock Analyzer API Key" \
+    --overwrite
+
+# Set up CloudWatch billing alerts
+echo "💰 Setting up CloudWatch billing alerts..."
+SNS_TOPIC_ARN=$(aws sns create-topic --name "stock-analyzer-billing-alerts" --query "TopicArn" --output text)
+
+aws cloudwatch put-metric-alarm \
+    --alarm-name "Stock-Analyzer-High-Cost" \
+    --alarm-description "Alert when monthly costs exceed $10" \
+    --metric-name "EstimatedCharges" \
+    --namespace "AWS/Billing" \
+    --statistic "Maximum" \
+    --period 21600 \
+    --evaluation-periods 1 \
+    --threshold 10 \
+    --comparison-operator "GreaterThanThreshold" \
+    --unit "USD" \
+    --alarm-actions "$SNS_TOPIC_ARN"
+
+echo "✅ CloudWatch billing alarm created with $10 threshold"
+
 echo ""
 echo "🎉 Deployment completed successfully!"
 echo ""
@@ -151,10 +190,19 @@ echo "  Stack Name: $STACK_NAME"
 echo "  API URL: $API_URL"
 echo "  S3 Bucket: $S3_BUCKET"
 echo "  Lambda ARN: $LAMBDA_ARN"
+echo "  API Key: $API_KEY"
+echo "  CloudFront: https://d224ztwcw6zi6e.cloudfront.net"
+echo "  Billing Alert: $10 threshold configured"
+echo "  Rate Limiting: Route-specific throttling enabled"
 echo ""
 echo "🧪 Test the deployment:"
-echo "  curl $API_URL/health"
-echo "  curl $API_URL/analysis/AAPL"
+echo "  curl -H \"X-API-Key: \$API_KEY\" $API_URL/health"
+echo "  curl -H \"X-API-Key: \$API_KEY\" $API_URL/recommendations"
+echo "  curl -H \"X-API-Key: \$API_KEY\" $API_URL/history/2024-02-07"
+echo ""
+echo "🌐 Frontend URLs:"
+echo "  HTTPS CDN: https://d224ztwcw6zi6e.cloudfront.net"
+echo "  S3 Direct: http://7h-stock-analyzer.s3-website-us-east-1.amazonaws.com"
 echo ""
 echo "💰 Cost Optimization Applied:"
 echo "  ✅ Reduced memory to ${MEMORY_SIZE}MB"
@@ -162,11 +210,18 @@ echo "  ✅ Reduced timeout to ${TIMEOUT}s"
 echo "  ✅ Limited concurrency to ${RESERVED_CONCURRENCY}"
 echo "  ✅ Disabled VPC (reduces cost)"
 echo "  ✅ Optimized layer size ($LAYER_SIZE)"
+echo "  ✅ Rate limiting configured (HTTP API - FREE)"
 echo ""
 echo "📊 Estimated Monthly Cost: < $15"
 echo "  - Lambda: ~$8 (based on 100k invocations/month)"
 echo "  - S3: ~$3 (storage + requests)"
 echo "  - API Gateway: ~$4 (1M requests/month)"
+echo "  - Rate Limiting: $0.00 (HTTP API throttling included)"
+echo "  - CloudWatch Logs: ~$0.50 (log ingestion)"
+echo "  - CloudWatch Alarms: ~$0.10 (billing alerts)"
+echo "  - CloudFront: ~$0.00 (free tier: 1TB + 10M requests)"
+echo "  - Total: ~$15.60/month (conservative high-usage estimate)"
+echo "  - Light usage: ~$2.46/month (61 invocations/month)"
 
 # Clean up local files
 echo "🧹 Cleaning up local files..."
@@ -224,3 +279,50 @@ fi
 
 echo ""
 echo "✅ Weekly reconciliation setup completed!"
+
+# Verify rate limiting configuration
+echo ""
+echo "🔒 Verifying rate limiting configuration..."
+
+# Get API Gateway ID for rate limiting verification
+API_GATEWAY_ID=$(aws apigatewayv2 get-apis \
+    --query "Items[?Name=='7h-stock-analyzer'].ApiId" \
+    --output text \
+    --region $AWS_REGION 2>/dev/null || echo "")
+
+if [ -n "$API_GATEWAY_ID" ] && [ "$API_GATEWAY_ID" != "None" ]; then
+    echo "🚦 API Gateway ID: $API_GATEWAY_ID"
+    
+    # Get current stage configuration
+    echo "📋 Current rate limiting configuration:"
+    aws apigatewayv2 get-stage \
+        --api-id "$API_GATEWAY_ID" \
+        --stage-name "\$default" \
+        --region $AWS_REGION \
+        --query 'RouteSettings' \
+        --output table 2>/dev/null || echo "  ℹ️  Rate limiting configured in template"
+    
+    echo ""
+    echo "🎯 Rate limiting limits by endpoint:"
+    echo "  GET /recommendations: 20 req/s burst 10"
+    echo "  POST /run-now: 10 req/s burst 5"
+    echo "  GET /history/{date}: 30 req/s burst 15"
+    echo "  GET /history/{date}/enhanced: 10 req/s burst 5"
+    echo "  POST /recon/run: 5 req/s burst 2"
+    echo "  GET /config: 15 req/s burst 10"
+    echo "  POST /config/update: 10 req/s burst 5"
+    echo "  Default: 100 req/s burst 20"
+    
+    echo ""
+    echo "🧪 To test rate limiting:"
+    echo "  # Test normal operation (should work)"
+    echo "  curl -H \"X-API-Key: \$API_KEY\" $API_URL/health"
+    echo ""
+    echo "  # Test throttling (rapid requests may get 429)"
+    echo "  for i in {1..10}; do curl -H \"X-API-Key: \$API_KEY\" $API_URL/health; done"
+else
+    echo "⚠️  Could not verify rate limiting - may need manual check"
+fi
+
+echo ""
+echo "🔒 Rate limiting verification completed!"

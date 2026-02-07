@@ -118,10 +118,24 @@ def run_reconciliation(auth: bool = verify_api_key):
 def get_historical_recommendations_enhanced(date: str, auth: bool = verify_api_key):
     """Get historical recommendations with reconciliation data for a specific date (YYYY-MM-DD)"""
     try:
-        from app.services.s3_store import get_historical_results
-        return get_historical_results(date, include_recon=True)
+        # Check if enhanced historical data exists in S3 website path first
+        from app.services.s3_store import s3_client, BUCKET_NAME
+        import os
+        
+        enhanced_key = f'data/enhanced/{date}.json'
+        try:
+            response = s3_client.get_object(Bucket=BUCKET_NAME, Key=enhanced_key)
+            enhanced_data = json.loads(response['Body'].read().decode('utf-8'))
+            return enhanced_data
+        except s3_client.exceptions.NoSuchKey:
+            # Fallback to generating enhanced data on-the-fly
+            from app.services.s3_store import get_historical_results, persist_enhanced_historical_data
+            enhanced_data = get_historical_results(date, include_recon=True)
+            # Persist for future direct S3 access
+            persist_enhanced_historical_data(date, enhanced_data)
+            return enhanced_data
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get historical data: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get enhanced historical data: {str(e)}")
 
 
 @app.get("/health")

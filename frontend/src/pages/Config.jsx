@@ -34,6 +34,13 @@ const Config = () => {
         const configData = data.configs[selectedConfig]
         setSymbols(configData.success ? configData.symbols || [] : [])
       }
+
+      // Show success message if data loaded from S3
+      const hasS3Data = Object.values(data.configs || {}).some(config => config.source === 's3')
+      if (hasS3Data) {
+        setSuccess('Configuration loaded from S3 successfully!')
+        setTimeout(() => setSuccess(null), 3000)
+      }
     } catch (err) {
       setError(err.message)
     } finally {

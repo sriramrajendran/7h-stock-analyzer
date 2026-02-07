@@ -35,8 +35,9 @@ class ReconService:
                 if recon_data:
                     recon_results.append(recon_data)
             
-            # Save recon results
+            # Save recon results to both API and website paths
             self._save_recon_results(recon_results)
+            self._save_recon_to_website(recon_results)
             
             return {
                 'success': True,
@@ -186,6 +187,105 @@ class ReconService:
         except Exception as e:
             logger.error(f"Error updating recommendations with recon: {str(e)}")
             raise
+    
+    def _save_recon_to_website(self, recon_results: List[ReconData]):
+        """Save reconciliation data to S3 website path for direct access"""
+        try:
+            today = datetime.utcnow().strftime('%Y-%m-%d')
+            
+            # Save daily recon data to website path
+            daily_website_key = f'recon/daily/{today}.json'
+            
+            recon_data = {
+                'date': today,
+                'timestamp': datetime.utcnow().isoformat(),
+                'count': len(recon_results),
+                'reconciliations': [recon.__dict__ for recon in recon_results],
+                'data_type': 'daily_reconciliation',
+                'version': '2.0'
+            }
+            
+            self.s3_client.put_object(
+                Bucket=self.bucket_name,
+                Key=daily_website_key,
+                Body=json.dumps(recon_data, indent=2),
+                ContentType='application/json',
+                ServerSideEncryption='AES256'
+            )
+            logger.info(f"Saved daily recon to website path: s3://{self.bucket_name}/{daily_website_key}")
+            
+            # Update and save recon summary to website path
+            self._update_recon_summary_website(recon_results)
+            
+        except Exception as e:
+            logger.error(f"Error saving recon to website: {str(e)}")
+            # Don't raise - website path is secondary access method
+    
+    def _update_recon_summary_website(self, recon_results: List[ReconData]):
+        """Update reconciliation summary on website path"""
+        try:
+            # Get current summary or create new
+            summary_key = 'recon/summary.json'
+            
+            try:
+                response = self.s3_client.get_object(
+                    Bucket=self.bucket_name,
+                    Key=summary_key
+                )
+                current_summary = json.loads(response['Body'].read().decode('utf-8'))
+            except self.s3_client.exceptions.NoSuchKey:
+                current_summary = {
+                    'total_reconciled': 0,
+                    'targets_met': 0,
+                    'stop_losses_hit': 0,
+                    'avg_days_to_target': 0,
+                    'performance_by_recommendation': {},
+                    'last_updated': None
+                }
+            
+            # Update summary with new results
+            for recon in recon_results:
+                current_summary['total_reconciled'] += 1
+                
+                if recon.target_met:
+                    current_summary['targets_met'] += 1
+                
+                if recon.stop_loss_hit:
+                    current_summary['stop_losses_hit'] += 1
+                
+                # Track by recommendation type
+                rec_type = recon.original_recommendation
+                if rec_type not in current_summary['performance_by_recommendation']:
+                    current_summary['performance_by_recommendation'][rec_type] = {
+                        'count': 0,
+                        'targets_met': 0,
+                        'stop_losses_hit': 0
+                    }
+                
+                current_summary['performance_by_recommendation'][rec_type]['count'] += 1
+                if recon.target_met:
+                    current_summary['performance_by_recommendation'][rec_type]['targets_met'] += 1
+                if recon.stop_loss_hit:
+                    current_summary['performance_by_recommendation'][rec_type]['stop_losses_hit'] += 1
+            
+            # Update timestamp
+            current_summary['last_updated'] = datetime.utcnow().isoformat()
+            current_summary['data_type'] = 'reconciliation_summary'
+            current_summary['version'] = '2.0'
+            
+            # Save updated summary
+            self.s3_client.put_object(
+                Bucket=self.bucket_name,
+                Key=summary_key,
+                Body=json.dumps(current_summary, indent=2),
+                ContentType='application/json',
+                ServerSideEncryption='AES256'
+            )
+            logger.info(f"Updated recon summary on website path: s3://{self.bucket_name}/{summary_key}")
+            
+        except Exception as e:
+            logger.error(f"Error updating recon summary website: {str(e)}")
+            # Don't raise - website path is secondary access method
     
     def get_recon_summary(self, days: int = 30) -> Dict[str, Any]:
         """Get reconciliation summary for the last N days"""

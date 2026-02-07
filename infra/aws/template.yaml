@@ -1,7 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: >
-  Features: Target prices, stop losses, confidence levels, recon, purge, security
+Description: 7H Stock Analyzer - Serverless Stock Analysis Application
 
 Globals:
   Function:
@@ -10,42 +9,19 @@ Globals:
     MemorySize: 512
     Environment:
       Variables:
-        AWS_REGION: !Ref AWS::Region
+        APP_AWS_REGION: !Ref AWS::Region
         S3_BUCKET_NAME: !Ref StockDataBucket
-        PUSHOVER_TOKEN: !Ref PushoverToken
-        PUSHOVER_USER: !Ref PushoverUser
-        ENABLE_NOTIFICATIONS: "true"
-        LOG_LEVEL: "WARNING"
-        ENVIRONMENT: "prod"
-        ENABLE_VERBOSE_LOGGING: "false"
-        ENABLE_STRUCTURED_LOGGING: "true"
-        REQUIRE_AUTH: "true"
-        API_KEY: "{{resolve:ssm:/stock-analyzer/api-key:1}}"
-    Tags:
-      Project: "7H-Stock-Analyzer"
-      Environment: "Production"
+        LOG_LEVEL: INFO
+        ENVIRONMENT: !Ref Environment
 
 Parameters:
-  PushoverToken:
-    Type: String
-    Description: Pushover API token for notifications
-    Default: ""
-    NoEcho: true
-  PushoverUser:
-    Type: String
-    Description: Pushover user key for notifications
-    Default: ""
-    NoEcho: true
   Environment:
     Type: String
-    Description: Environment name (dev/staging/prod)
-    Default: "dev"
-    AllowedValues: ["dev", "staging", "prod"]
-  EnableVpc:
-    Type: String
-    Description: Enable VPC isolation for enhanced security
-    Default: "false"
-    AllowedValues: ["true", "false"]
+    Default: production
+    AllowedValues:
+      - production
+      - staging
+      - dev
 
 Resources:
   StockAnalyzerFunction:
@@ -58,61 +34,51 @@ Resources:
         - x86_64
       Layers:
         - !Ref DependenciesLayer
-      Policies:
-        - Statement:
-            - Effect: Allow
-              Action:
-                - s3:ListBucket
-              Resource: !Sub "arn:aws:s3:::${StockDataBucket}"
-            - Effect: Allow
-              Action:
-                - s3:GetObject
-                - s3:PutObject
-                - s3:DeleteObject
-              Resource: !Sub "arn:aws:s3:::${StockDataBucket}/*"
-        - Statement:
-            - Effect: Allow
-              Action:
-                - logs:CreateLogGroup
-                - logs:CreateLogStream
-                - logs:PutLogEvents
-              Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${StockAnalyzerFunction}*"
+      Runtime: python3.10
+      Timeout: 900
+      MemorySize: 512
+      Environment:
+        Variables:
+          APP_AWS_REGION: !Ref AWS::Region
+          S3_BUCKET_NAME: !Ref StockDataBucket
+          LOG_LEVEL: INFO
+          ENVIRONMENT: !Ref Environment
+      Role: !GetAtt StockAnalyzerExecutionRole.Arn
       Events:
         Api:
           Type: HttpApi
           Properties:
             Path: /{proxy+}
             Method: ANY
-        CronTrigger30Min:
-          Type: Schedule
-          Properties:
-            Schedule: cron(0 15 ? * MON-FRI *)
-            Name: StockAnalyzerCron30Min
-            Description: Trigger stock analysis 30 minutes after market open
-            Enabled: true
-            RetryPolicy:
-              MaximumRetryAttempts: 1
-              MaximumEventAgeInSeconds: 1800
-        CronTriggerMidday:
-          Type: Schedule
-          Properties:
-            Schedule: cron(30 17 ? * MON-FRI *)
-            Name: StockAnalyzerCronMidday
-            Description: Trigger stock analysis at midday trading
-            Enabled: true
-            RetryPolicy:
-              MaximumRetryAttempts: 1
-              MaximumEventAgeInSeconds: 1800
-        CronTriggerWeeklyRecon:
-          Type: Schedule
-          Properties:
-            Schedule: cron(0 23 ? * SUN *)
-            Name: StockAnalyzerWeeklyRecon
-            Description: Trigger weekly reconciliation for performance tracking
-            Enabled: true
-            RetryPolicy:
-              MaximumRetryAttempts: 2
-              MaximumEventAgeInSeconds: 3600
+
+  StockAnalyzerExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-execution-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: S3AccessPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource: !Sub "arn:aws:s3:::${StockDataBucket}"
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource: !Sub "arn:aws:s3:::${StockDataBucket}/*"
 
   DependenciesLayer:
     Type: AWS::Serverless::LayerVersion
@@ -135,7 +101,6 @@ Resources:
         RestrictPublicBuckets: true
       VersioningConfiguration:
         Status: Enabled
-        MfaDelete: Enabled
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
@@ -147,105 +112,37 @@ Resources:
           - Id: DeleteOldDailyFiles
             Status: Enabled
             ExpirationInDays: 365
-            Filter:
-              Prefix: data/daily/
-          - Id: DeleteOldReconFiles
-            Status: Enabled
-            ExpirationInDays: 180
-            Filter:
-              Prefix: recon/daily/
-          - Id: DeleteOldCharts
-            Status: Enabled
-            ExpirationInDays: 30
-            Filter:
-              Prefix: charts/
-          - Id: DeleteTempFiles
-            Status: Enabled
-            ExpirationInDays: 7
-            Filter:
-              Prefix: temp/
           - Id: DeleteOldLogs
             Status: Enabled
             ExpirationInDays: 30
-            Filter:
-              Prefix: logs/
-      WebsiteConfiguration:
-        IndexDocument: index.html
-        ErrorDocument: error.html
-      CorsConfiguration:
-        CorsRules:
-          - AllowedHeaders: ["Content-Type", "Authorization"]
-            AllowedMethods: [GET, HEAD, OPTIONS]
-            AllowedOrigins: ["https://*.amazonaws.com", "http://localhost:*"]
-            MaxAge: 3600
-            ExposedHeaders: []
+          - Id: DeleteTempFiles
+            Status: Enabled
+            ExpirationInDays: 7
 
   StockDataBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
       Bucket: !Ref StockDataBucket
       PolicyDocument:
+        Version: "2012-10-17"
         Statement:
-          - Sid: PublicReadWebsiteFiles
-            Effect: Allow
+          - Sid: "AllowCloudFrontServicePrincipal"
+            Effect: "Allow"
+            Principal:
+              Service: "cloudfront.amazonaws.com"
+            Action:
+              - "s3:GetObject"
+            Resource: !Sub "arn:aws:s3:::${StockDataBucket}/*"
+          - Sid: "AllowHTTPSOnly"
+            Effect: "Deny"
             Principal: "*"
-            Action: s3:GetObject
-            Resource: 
-              - !Sub "arn:aws:s3:::${StockDataBucket}/index.html"
-              - !Sub "arn:aws:s3:::${StockDataBucket}/error.html"
-              - !Sub "arn:aws:s3:::${StockDataBucket}/public/*"
-              - !Sub "arn:aws:s3:::${StockDataBucket}/assets/*"
-          - Sid: DenyInsecureConnections
-            Effect: Deny
-            Principal: "*"
-            Action: s3:*
+            Action: "s3:*"
             Resource: 
               - !Sub "arn:aws:s3:::${StockDataBucket}"
               - !Sub "arn:aws:s3:::${StockDataBucket}/*"
             Condition:
               Bool:
-                aws:SecureTransport: false
-          - Sid: LambdaAccess
-            Effect: Allow
-            Principal:
-              AWS: !GetAtt StockAnalyzerFunction.Arn
-            Action: 
-              - s3:GetObject
-              - s3:PutObject
-              - s3:DeleteObject
-              - s3:ListBucket
-            Resource: 
-              - !Sub "arn:aws:s3:::${StockDataBucket}"
-              - !Sub "arn:aws:s3:::${StockDataBucket}/*"
-          - Sid: RootAccountAccess
-            Effect: Allow
-            Principal:
-              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
-            Action: 
-              - s3:*
-            Resource: 
-              - !Sub "arn:aws:s3:::${StockDataBucket}"
-              - !Sub "arn:aws:s3:::${StockDataBucket}/*"
-          - Sid: CurrentUserAccess
-            Effect: Allow
-            Principal:
-              AWS: !Ref AWS::AccountId
-            Action: 
-              - s3:*
-            Resource: 
-              - !Sub "arn:aws:s3:::${StockDataBucket}"
-              - !Sub "arn:aws:s3:::${StockDataBucket}/*"
-          - Sid: DenyAllOtherAccess
-            Effect: Deny
-            NotPrincipal:
-              AWS:
-                - !GetAtt StockAnalyzerFunction.Arn
-                - !Sub "arn:aws:iam::${AWS::AccountId}:root"
-                - !Ref AWS::AccountId
-            Action: s3:*
-            Resource: 
-              - !Sub "arn:aws:s3:::${StockDataBucket}"
-              - !Sub "arn:aws:s3:::${StockDataBucket}/*"
+                "aws:SecureTransport": false
 
   StockAnalyzerApi:
     Type: AWS::Serverless::HttpApi
@@ -258,10 +155,12 @@ Resources:
           - OPTIONS
         AllowHeaders:
           - "Content-Type"
+          - "Authorization"
           - "X-API-Key"
         AllowOrigins:
-          - "https://*.amazonaws.com"
-          - "http://localhost:*"
+          - "https://d224ztwcw6zi6e.cloudfront.net"
+          - "http://localhost:3000"
+          - "http://localhost:8080"
         MaxAge: 3600
 
   StockAnalyzerLogGroup:
@@ -269,10 +168,6 @@ Resources:
     Properties:
       LogGroupName: !Sub "/aws/lambda/${StockAnalyzerFunction}"
       RetentionInDays: 3
-
-
-  Conditions:
-  EnableVpcCondition: !Equals [!Ref EnableVpc, "true"]
 
 Outputs:
   StockAnalyzerFunction:
@@ -283,7 +178,7 @@ Outputs:
 
   StockAnalyzerApi:
     Description: "API Gateway endpoint URL"
-    Value: !Sub "https://${StockAnalyzerApi}.execute-api.${AWS::Region}.amazonaws.com/"
+    Value: !Sub "https://${StockAnalyzerApi}.execute-api.${AWS::Region}.amazonaws.com"
     Export:
       Name: !Sub "${AWS::StackName}-StockAnalyzerApi"
 
@@ -292,9 +187,3 @@ Outputs:
     Value: !Ref StockDataBucket
     Export:
       Name: !Sub "${AWS::StackName}-StockDataBucket"
-
-  StockDataBucketURL:
-    Description: "S3 bucket website URL"
-    Value: !Sub "http://${StockDataBucket}.s3-website-${AWS::Region}.amazonaws.com"
-    Export:
-      Name: !Sub "${AWS::StackName}-StockDataBucketURL"

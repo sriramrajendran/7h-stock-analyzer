@@ -68,12 +68,30 @@ export const s3Api = {
   },
 
   getHistoricalRecommendationsEnhanced: async (date) => {
-    // Always use local API for enhanced data (includes reconciliation)
-    const response = await fetch(`${API_BASE_URL}/history/${date}/enhanced`, {
-      headers: getHeaders()
-    })
+    // Use direct S3 access for enhanced historical data
+    if (isDevelopment) {
+      // In development, still use API for testing
+      const response = await fetch(`${API_BASE_URL}/history/${date}/enhanced`, {
+        headers: getHeaders()
+      })
+      if (!response.ok) {
+        throw new Error('Failed to fetch enhanced historical recommendations')
+      }
+      return response.json()
+    }
+    
+    // Production: Direct S3 access
+    const s3Url = `http://${S3_BUCKET}.s3-website-${S3_REGION}.amazonaws.com/data/enhanced/${date}.json`
+    const response = await fetch(s3Url)
     if (!response.ok) {
-      throw new Error('Failed to fetch enhanced historical recommendations')
+      // Fallback to API if S3 file doesn't exist
+      const apiResponse = await fetch(`${API_BASE_URL}/history/${date}/enhanced`, {
+        headers: getHeaders()
+      })
+      if (!apiResponse.ok) {
+        throw new Error('Failed to fetch enhanced historical recommendations')
+      }
+      return apiResponse.json()
     }
     return response.json()
   },
@@ -123,25 +141,182 @@ export const lambdaApi = {
     }
   },
 
-  // Configuration management
-  getConfig: async (configType) => {
-    const response = await fetch(`${API_BASE_URL}/config/${configType}`, {
-      headers: getHeaders()
-    })
+  // Reconciliation data via direct S3 access
+  getReconciliationSummary: async () => {
+    // Use direct S3 access for reconciliation summary
+    if (isDevelopment) {
+      // In development, still use API for testing
+      const response = await fetch(`${API_BASE_URL}/recon/summary`, {
+        headers: getHeaders()
+      })
+      if (!response.ok) {
+        throw new Error('Failed to fetch reconciliation summary')
+      }
+      return response.json()
+    }
+    
+    // Production: Direct S3 access
+    const s3Url = `http://${S3_BUCKET}.s3-website-${S3_REGION}.amazonaws.com/recon/summary.json`
+    const response = await fetch(s3Url)
     if (!response.ok) {
-      throw new Error('Failed to fetch configuration')
+      // Fallback to API if S3 file doesn't exist
+      const apiResponse = await fetch(`${API_BASE_URL}/recon/summary`, {
+        headers: getHeaders()
+      })
+      if (!apiResponse.ok) {
+        throw new Error('Failed to fetch reconciliation summary')
+      }
+      return apiResponse.json()
     }
     return response.json()
   },
 
-  getAllConfigs: async () => {
-    const response = await fetch(`${API_BASE_URL}/config`, {
-      headers: getHeaders()
-    })
+  getDailyReconciliation: async (date) => {
+    // Use direct S3 access for daily reconciliation data
+    if (isDevelopment) {
+      // In development, still use API for testing
+      const response = await fetch(`${API_BASE_URL}/recon/daily/${date}`, {
+        headers: getHeaders()
+      })
+      if (!response.ok) {
+        throw new Error('Failed to fetch daily reconciliation')
+      }
+      return response.json()
+    }
+    
+    // Production: Direct S3 access
+    const s3Url = `http://${S3_BUCKET}.s3-website-${S3_REGION}.amazonaws.com/recon/daily/${date}.json`
+    const response = await fetch(s3Url)
     if (!response.ok) {
-      throw new Error('Failed to fetch all configurations')
+      // Fallback to API if S3 file doesn't exist
+      const apiResponse = await fetch(`${API_BASE_URL}/recon/daily/${date}`, {
+        headers: getHeaders()
+      })
+      if (!apiResponse.ok) {
+        throw new Error('Failed to fetch daily reconciliation')
+      }
+      return apiResponse.json()
     }
     return response.json()
+  },
+
+  // Configuration management - Read directly from S3 TXT files
+  getConfig: async (configType) => {
+    try {
+      // Use S3 website endpoint for direct access to TXT files
+      const s3Url = `http://${S3_BUCKET}.s3-website-${S3_REGION}.amazonaws.com/config/config_${configType}.txt`
+      const response = await fetch(s3Url)
+      
+      if (!response.ok) {
+        // If S3 fails, try API as fallback
+        const apiResponse = await fetch(`${API_BASE_URL}/config/${configType}`, {
+          headers: getHeaders()
+        })
+        if (!apiResponse.ok) {
+          throw new Error('Failed to fetch configuration')
+        }
+        return apiResponse.json()
+      }
+      
+      // Parse TXT file - each line is a symbol
+      const text = await response.text()
+      const symbols = text.split('\n')
+        .map(line => line.trim())
+        .filter(line => line && !line.startsWith('#') && !line.startsWith('//'))
+      
+      return {
+        success: true,
+        symbols: symbols,
+        source: 's3'
+      }
+    } catch (error) {
+      // Final fallback to API
+      try {
+        const apiResponse = await fetch(`${API_BASE_URL}/config/${configType}`, {
+          headers: getHeaders()
+        })
+        if (!apiResponse.ok) {
+          throw new Error('Failed to fetch configuration')
+        }
+        return apiResponse.json()
+      } catch (apiError) {
+        return handleApiError(apiError, {
+          success: false,
+          error: 'Configuration not available',
+          symbols: []
+        })
+      }
+    }
+  },
+
+  getAllConfigs: async () => {
+    const configTypes = ['portfolio', 'watchlist', 'us_stocks', 'etfs']
+    const configs = {}
+    
+    for (const configType of configTypes) {
+      try {
+        // Use S3 website endpoint for direct access to TXT files
+        const s3Url = `http://${S3_BUCKET}.s3-website-${S3_REGION}.amazonaws.com/config/config_${configType}.txt`
+        const response = await fetch(s3Url)
+        
+        if (response.ok) {
+          // Parse TXT file - each line is a symbol
+          const text = await response.text()
+          const symbols = text.split('\n')
+            .map(line => line.trim())
+            .filter(line => line && !line.startsWith('#') && !line.startsWith('//'))
+          
+          configs[configType] = {
+            success: true,
+            symbols: symbols,
+            source: 's3'
+          }
+        } else {
+          // Try API as fallback
+          const apiResponse = await fetch(`${API_BASE_URL}/config/${configType}`, {
+            headers: getHeaders()
+          })
+          if (apiResponse.ok) {
+            const apiData = await apiResponse.json()
+            configs[configType] = apiData
+          } else {
+            configs[configType] = {
+              success: false,
+              symbols: [],
+              error: 'Configuration not found'
+            }
+          }
+        }
+      } catch (error) {
+        // Final fallback to API or empty config
+        try {
+          const apiResponse = await fetch(`${API_BASE_URL}/config/${configType}`, {
+            headers: getHeaders()
+          })
+          if (apiResponse.ok) {
+            const apiData = await apiResponse.json()
+            configs[configType] = apiData
+          } else {
+            configs[configType] = {
+              success: false,
+              symbols: [],
+              error: 'Configuration not available'
+            }
+          }
+        } catch (apiError) {
+          configs[configType] = {
+            success: false,
+            symbols: [],
+            error: 'Configuration not available'
+          }
+        }
+      }
+    }
+    
+    return {
+      success: true,
+      configs: configs
+    }
   },
 
   updateConfig: async (configType, symbols, backup = true) => {
@@ -190,8 +365,11 @@ export const lambdaApi = {
 export const api = {
   getLatestRecommendations: s3Api.getLatestRecommendations,
   getHistoricalRecommendations: s3Api.getHistoricalRecommendations,
+  getHistoricalRecommendationsEnhanced: s3Api.getHistoricalRecommendationsEnhanced,
   triggerManualRun: lambdaApi.triggerManualRun,
   getHealth: lambdaApi.healthCheck,
+  getReconciliationSummary: lambdaApi.getReconciliationSummary,
+  getDailyReconciliation: lambdaApi.getDailyReconciliation,
   getConfig: lambdaApi.getConfig,
   getAllConfigs: lambdaApi.getAllConfigs,
   updateConfig: lambdaApi.updateConfig,

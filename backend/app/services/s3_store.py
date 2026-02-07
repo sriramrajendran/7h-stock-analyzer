@@ -80,6 +80,48 @@ def persist_results(recommendations: List[Recommendation]) -> bool:
         return False
 
 
+def persist_enhanced_historical_data(date: str, enhanced_data: Dict[str, Any]) -> bool:
+    """
+    Persist enhanced historical data to S3 website path for direct access
+    
+    Args:
+        date: Date string in YYYY-MM-DD format
+        enhanced_data: Enhanced historical data with reconciliation info
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        # Prepare enhanced historical data
+        data = {
+            'date': date,
+            'timestamp': datetime.utcnow().isoformat(),
+            'enhanced_data': enhanced_data,
+            'data_type': 'enhanced_historical',
+            'version': '2.0'
+        }
+        
+        # Save to website path for direct S3 access
+        enhanced_key = f'data/enhanced/{date}.json'
+        s3_client.put_object(
+            Bucket=BUCKET_NAME,
+            Key=enhanced_key,
+            Body=json.dumps(data, indent=2),
+            ContentType='application/json',
+            ServerSideEncryption='AES256'
+        )
+        logger.info(f"Saved enhanced historical data to s3://{BUCKET_NAME}/{enhanced_key}")
+        
+        return True
+        
+    except ClientError as e:
+        logger.error(f"S3 client error saving enhanced historical data: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"Error saving enhanced historical data: {e}")
+        return False
+
+
 def get_available_dates() -> List[str]:
     """Get list of available dates with historical recommendations"""
     try:
