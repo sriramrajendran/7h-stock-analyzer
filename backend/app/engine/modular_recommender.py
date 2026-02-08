@@ -16,9 +16,9 @@ logger = logging.getLogger(__name__)
 class ModularStockAnalyzer:
     """Main orchestrator for the modular stock analysis system"""
     
-    def __init__(self, s3_bucket: str = None, use_cache: bool = True):
+    def __init__(self, s3_bucket: str = None, use_cache: bool = False):
         self.s3_bucket = s3_bucket or os.getenv('S3_BUCKET_NAME', '7h-stock-analyzer-dev')
-        self.use_cache = use_cache
+        self.use_cache = use_cache  # Disabled for debugging
         
         # Initialize all modules
         self.data_loader = DataLoader(s3_bucket=self.s3_bucket, use_s3_cache=self.use_cache)
@@ -26,7 +26,7 @@ class ModularStockAnalyzer:
         self.signal_engine = SignalEngine()
         self.recommendation_engine = RecommendationEngine()
         
-        logger.info("Modular Stock Analyzer initialized")
+        logger.info("Modular Stock Analyzer initialized (cache disabled for debugging)")
     
     def analyze_universe(self, tickers: List[str] = None, period: str = "1y") -> List[Dict]:
         """Complete analysis pipeline for a universe of stocks"""

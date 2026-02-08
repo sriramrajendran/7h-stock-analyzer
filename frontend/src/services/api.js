@@ -1,11 +1,26 @@
 // API service for communicating with Lambda backend and direct S3 access
 
-const API_BASE_URL = import.meta.env.REACT_APP_API_BASE_URL || 'https://8s0seutfrh.execute-api.us-east-1.amazonaws.com'
-const S3_BUCKET_URL = import.meta.env.REACT_APP_S3_BUCKET_URL || 'https://7h-stock-analyzer.s3.us-east-1.amazonaws.com'
-const CLOUDFRONT_URL = import.meta.env.REACT_APP_CLOUDFRONT_URL || 'https://d37m5zz5fkglhg.cloudfront.net'
+// Environment detection - CRITICAL for AWS deployment safety
+const isLocalDev = import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
 
-// Use CloudFront for data access to avoid mixed content issues
-const S3_DATA_URL = CLOUDFRONT_URL
+// Use environment-specific URLs based on deployment context
+const API_BASE_URL = isLocalDev 
+  ? (import.meta.env.REACT_APP_API_BASE_URL_LOCAL || 'http://localhost:8000')
+  : (import.meta.env.REACT_APP_API_BASE_URL_AWS || 'https://8s0seutfrh.execute-api.us-east-1.amazonaws.com')
+
+const S3_BUCKET_URL = isLocalDev
+  ? `https://${import.meta.env.REACT_APP_S3_BUCKET_LOCAL || '7h-stock-analyzer-dev'}.s3.us-east-1.amazonaws.com`
+  : `https://${import.meta.env.REACT_APP_S3_BUCKET_PROD || '7h-stock-analyzer'}.s3.us-east-1.amazonaws.com`
+
+// Use CloudFront for production, S3 bucket for local development
+const CLOUDFRONT_URL = isLocalDev 
+  ? 'http://localhost:8000'  // Local development
+  : (import.meta.env.REACT_APP_CLOUDFRONT_URL || 'https://d37m5zz5fkglhg.cloudfront.net')  // AWS production
+
+// Use appropriate data URL: S3 bucket for configs, CloudFront/API for other data
+const S3_DATA_URL = isLocalDev 
+  ? S3_BUCKET_URL  // Use S3 dev bucket for config files in local development
+  : CLOUDFRONT_URL  // Use CloudFront for production
 
 // Get API key from localStorage or parent component
 let currentApiKey = localStorage.getItem('stockAnalyzerApiKey') || ''
@@ -32,19 +47,24 @@ export const s3Api = {
   // Latest recommendations from S3 (direct access)
   getLatestRecommendations: async () => {
     try {
-      const response = await fetch(`${S3_DATA_URL}/data/latest.json`, {
+      // For local development, use Lambda endpoint instead of S3
+      const url = isLocalDev 
+        ? `${API_BASE_URL}/recommendations`
+        : `${S3_DATA_URL}/data/latest.json`
+      
+      const response = await fetch(url, {
         method: 'GET',
         headers: {
           'Cache-Control': 'no-cache'
         }
       })
       if (!response.ok) {
-        throw new Error('Failed to fetch latest recommendations from S3')
+        throw new Error('Failed to fetch latest recommendations')
       }
       return response.json()
     } catch (error) {
       // Fallback to Lambda if S3 fails
-      console.warn('S3 direct access failed, falling back to Lambda:', error)
+      console.warn('Data access failed, falling back to Lambda:', error)
       return lambdaApi.getLatestRecommendations()
     }
   },
@@ -123,17 +143,19 @@ export const s3Api = {
     }
   },
 
-  // Configuration from S3 (direct access)
+  // Configuration from backend API (consistent pattern)
   getConfig: async (configType) => {
     try {
-      const response = await fetch(`${S3_DATA_URL}/config/${configType}.json`)
+      const response = await fetch(`${API_BASE_URL}/config/${configType}`, {
+        headers: getHeaders()
+      })
       if (!response.ok) {
-        throw new Error('Failed to fetch configuration from S3')
+        throw new Error('Failed to fetch configuration')
       }
       return response.json()
     } catch (error) {
-      // Fallback to Lambda if S3 fails
-      console.warn('S3 direct access failed, falling back to Lambda:', error)
+      // Fallback to Lambda if API fails
+      console.warn('API config access failed, falling back to Lambda:', error)
       return lambdaApi.getConfig(configType)
     }
   },
@@ -145,7 +167,10 @@ export const s3Api = {
       
       for (const configType of configTypes) {
         try {
-          const response = await fetch(`${S3_DATA_URL}/config/${configType}.json`)
+          // Use backend API for config access (consistent pattern)
+          const response = await fetch(`${API_BASE_URL}/config/${configType}`, {
+            headers: getHeaders()
+          })
           if (response.ok) {
             const configData = await response.json()
             configs[configType] = configData
@@ -170,9 +195,7 @@ export const s3Api = {
         configs: configs
       }
     } catch (error) {
-      // Fallback to Lambda if S3 fails
-      console.warn('S3 direct access failed, falling back to Lambda:', error)
-      return lambdaApi.getAllConfigs()
+      throw new Error(`Failed to fetch configurations: ${error.message}`)
     }
   }
 }
@@ -287,6 +310,7 @@ export const lambdaApi = {
     
     for (const configType of configTypes) {
       try {
+        // Use backend API for config access (consistent with local dev)
         const response = await fetch(`${API_BASE_URL}/config/${configType}`, {
           headers: getHeaders()
         })

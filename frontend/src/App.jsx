@@ -33,16 +33,12 @@ function App() {
       fetchLatestRecommendations()
       fetchSystemHealth()
     }
-    // Auto-refresh recommendations every 5 minutes, health check every 10 minutes
+    // Auto-refresh recommendations every 5 minutes only
     const recommendationsInterval = hasApiKey ? setInterval(() => {
       fetchLatestRecommendations()
     }, 300000) : null
-    const healthInterval = hasApiKey ? setInterval(() => {
-      fetchSystemHealth()
-    }, 600000) : null
     return () => {
       if (recommendationsInterval) clearInterval(recommendationsInterval)
-      if (healthInterval) clearInterval(healthInterval)
     }
   }, [hasApiKey])
 
@@ -61,12 +57,12 @@ function App() {
   }
 
   const fetchSystemHealth = async () => {
-    // Cache health check for 2 minutes to reduce API calls
+    // Cache health check for 30 minutes to reduce API calls
     const now = Date.now()
     const lastHealthCheck = localStorage.getItem('lastHealthCheck')
     const cachedHealth = localStorage.getItem('cachedHealth')
     
-    if (lastHealthCheck && cachedHealth && (now - parseInt(lastHealthCheck)) < 120000) {
+    if (lastHealthCheck && cachedHealth && (now - parseInt(lastHealthCheck)) < 1800000) {
       setSystemHealth(JSON.parse(cachedHealth))
       return
     }
@@ -121,9 +117,9 @@ function App() {
           <div className="flex">
             <div className="flex-shrink-0 flex items-center">
               <img src="/stock-icon.svg" alt="7H Stock Analyzer" className="h-8 w-8 mr-2" />
-              <h1 className="text-xl font-bold text-gray-900">7H Stock Analyzer</h1>
+              <h1 className="text-lg sm:text-xl font-bold text-gray-900">7H Stock Analyzer</h1>
               {systemHealth && (
-                <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                <span className={`ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                   systemHealth.status === 'healthy' 
                     ? 'bg-green-100 text-green-800' 
                     : 'bg-red-100 text-red-800'
@@ -171,20 +167,70 @@ function App() {
               </button>
             </div>
           </div>
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2 sm:space-x-4">
             {lastUpdated && (
-              <span className="text-sm text-gray-500">
+              <span className="hidden sm:inline text-xs sm:text-sm text-gray-500 whitespace-nowrap">
                 Last updated: {new Date(lastUpdated).toLocaleString()}
               </span>
             )}
             <button
               onClick={triggerManualRun}
               disabled={loading}
-              className="btn btn-primary disabled:opacity-50"
+              className="btn btn-primary disabled:opacity-50 text-xs sm:text-sm px-2 sm:px-4 py-1 sm:py-2"
             >
               {loading ? 'Running...' : 'Run Now'}
             </button>
           </div>
+        </div>
+        {/* Mobile menu */}
+        <div className="sm:hidden border-t border-gray-200">
+          <div className="pt-2 pb-3 space-y-1">
+            <button
+              onClick={() => setCurrentPage('dashboard')}
+              className={`block pl-3 pr-4 py-2 border-l-4 text-base font-medium w-full text-left ${
+                currentPage === 'dashboard'
+                  ? 'bg-indigo-50 border-indigo-500 text-indigo-700'
+                  : 'border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800'
+              }`}
+            >
+              Dashboard
+            </button>
+            <button
+              onClick={() => setCurrentPage('history')}
+              className={`block pl-3 pr-4 py-2 border-l-4 text-base font-medium w-full text-left ${
+                currentPage === 'history'
+                  ? 'bg-indigo-50 border-indigo-500 text-indigo-700'
+                  : 'border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800'
+              }`}
+            >
+              History
+            </button>
+            <button
+              onClick={() => setCurrentPage('config')}
+              className={`block pl-3 pr-4 py-2 border-l-4 text-base font-medium w-full text-left ${
+                currentPage === 'config'
+                  ? 'bg-indigo-50 border-indigo-500 text-indigo-700'
+                  : 'border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800'
+              }`}
+            >
+              Configuration
+            </button>
+            <button
+              onClick={() => setShowApiKeyModal(true)}
+              className="block pl-3 pr-4 py-2 border-l-4 text-base font-medium w-full text-left border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800"
+            >
+              🔑 API Key
+            </button>
+          </div>
+          {lastUpdated && (
+            <div className="pt-4 pb-3 border-t border-gray-200">
+              <div className="px-4">
+                <div className="text-xs text-gray-500">
+                  Last updated: {new Date(lastUpdated).toLocaleString()}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </nav>

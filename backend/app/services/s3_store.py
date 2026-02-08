@@ -70,6 +70,9 @@ def persist_results(recommendations: List[Recommendation]) -> bool:
         )
         logger.info(f"Saved daily results to s3://{BUCKET_NAME}/{daily_key}")
         
+        # Update dates.json file
+        update_available_dates()
+        
         return True
         
     except ClientError as e:
@@ -158,7 +161,14 @@ def get_latest_results() -> Dict[str, Any]:
             Key='data/latest.json'
         )
         
-        data = json.loads(response['Body'].read().decode('utf-8'))
+        content = response['Body'].read().decode('utf-8')
+        
+        # Handle empty content
+        if not content.strip():
+            logger.warning("Empty latest.json content found in S3")
+            return {'error': 'No data available'}
+        
+        data = json.loads(content)
         return data
         
     except ClientError as e:
@@ -497,4 +507,125 @@ def cleanup_old_files(days_threshold: int = 1000) -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"Error cleaning up old files: {e}")
+        return {'success': False, 'error': str(e)}
+
+
+def update_available_dates() -> bool:
+    """
+    Update the dates.json file with all available historical dates
+    
+    Scans the data/daily/ directory and creates/updates dates.json
+    """
+    try:
+        # List all objects in data/daily/
+        response = s3_client.list_objects_v2(Bucket=BUCKET_NAME, Prefix='data/daily/')
+        dates = []
+        
+        if 'Contents' in response:
+            for obj in response['Contents']:
+                key = obj['Key']
+                if key.endswith('.json') and key != 'data/daily/dates.json':
+                    # Extract date from filename (e.g., 'data/daily/2026-02-01.json' -> '2026-02-01')
+                    date = key.split('/')[-1].replace('.json', '')
+                    dates.append(date)
+        
+        # Sort dates in descending order (newest first)
+        dates.sort(reverse=True)
+        
+        # Create dates.json data
+        dates_data = {
+            'success': True,
+            'dates': dates,
+            'count': len(dates),
+            'last_updated': dates[0] if dates else None,
+            'generated_at': datetime.utcnow().isoformat()
+        }
+        
+        # Upload dates.json to S3
+        s3_client.put_object(
+            Bucket=BUCKET_NAME,
+            Key='data/dates.json',
+            Body=json.dumps(dates_data, indent=2),
+            ContentType='application/json',
+            ServerSideEncryption='AES256'
+        )
+        
+        logger.info(f"Updated dates.json with {len(dates)} available dates")
+        return True
+        
+    except ClientError as e:
+        logger.error(f"S3 client error updating dates: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"Error updating available dates: {e}")
+        return False
+
+
+def get_available_dates() -> Dict[str, Any]:
+    """
+    Get available historical dates from dates.json
+    
+    Returns the dates.json content or generates it if missing
+    """
+    try:
+        # Try to get existing dates.json
+        response = s3_client.get_object(Bucket=BUCKET_NAME, Key='data/dates.json')
+        content = response['Body'].read().decode('utf-8')
+        return json.loads(content)
+        
+    except ClientError as e:
+        if e.response['Error']['Code'] == 'NoSuchKey':
+            # dates.json doesn't exist, create it
+            logger.info("dates.json not found, creating it...")
+            if update_available_dates():
+                # Try again after creating
+                response = s3_client.get_object(Bucket=BUCKET_NAME, Key='data/dates.json')
+                content = response['Body'].read().decode('utf-8')
+                return json.loads(content)
+            else:
+                return {'success': False, 'error': 'Failed to create dates.json'}
+        else:
+            raise e
+    except Exception as e:
+        logger.error(f"Error getting available dates: {e}")
+        return {'success': False, 'error': str(e)}
+
+
+def get_historical_data(date: str) -> Dict[str, Any]:
+    """
+    Get historical recommendations for a specific date
+    
+    Args:
+        date: Date in YYYY-MM-DD format
+    
+    Returns:
+        Historical data for the specified date
+    """
+    try:
+        # Validate date format
+        from datetime import datetime
+        try:
+            datetime.strptime(date, '%Y-%m-%d')
+        except ValueError:
+            return {'success': False, 'error': 'Invalid date format. Use YYYY-MM-DD'}
+        
+        # Get historical data from S3
+        key = f'data/daily/{date}.json'
+        response = s3_client.get_object(Bucket=BUCKET_NAME, Key=key)
+        content = response['Body'].read().decode('utf-8')
+        data = json.loads(content)
+        
+        # Add metadata
+        data['retrieved_at'] = datetime.utcnow().isoformat()
+        data['source'] = 's3'
+        
+        return data
+        
+    except ClientError as e:
+        if e.response['Error']['Code'] == 'NoSuchKey':
+            return {'success': False, 'error': f'No historical data found for date {date}'}
+        else:
+            raise e
+    except Exception as e:
+        logger.error(f"Error getting historical data for {date}: {e}")
         return {'success': False, 'error': str(e)}

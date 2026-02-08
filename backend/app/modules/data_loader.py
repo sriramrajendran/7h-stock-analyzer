@@ -5,6 +5,7 @@ Data Loader Module - Fetches OHLCV data from Yahoo Finance with S3 caching
 import yfinance as yf
 import pandas as pd
 import boto3
+import requests
 import os
 import json
 import time
@@ -29,25 +30,60 @@ class DataLoader:
     def fetch_single_ticker(self, ticker: str, period: str = "1y") -> pd.DataFrame:
         """Fetch data for a single ticker with S3 cache check"""
         ticker = ticker.upper().strip()
+        logger.info(f"Starting fetch for {ticker}")
         
         # Check S3 cache first
         if self.use_s3_cache:
+            logger.info(f"Checking S3 cache for {ticker}")
             cached_data = self._get_from_cache(ticker)
             if cached_data is not None:
                 logger.info(f"Cache hit for {ticker}")
                 return cached_data
+            else:
+                logger.info(f"Cache miss for {ticker}")
+        else:
+            logger.info(f"S3 cache disabled for {ticker}")
         
         # Fetch from Yahoo Finance
         try:
-            df = yf.download(ticker, period=period, progress=False, auto_adjust=False)
+            logger.info(f"Fetching fresh data for {ticker} from Yahoo Finance")
+            
+            # Add longer delay for rate limiting (avoid 429 errors)
+            time.sleep(random.uniform(2.0, 3.0))
+            
+            # Create session with proper headers to avoid blocking
+            session = requests.Session()
+            session.headers.update({
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            })
+            
+            # Try ticker object approach first (more reliable)
+            ticker_obj = yf.Ticker(ticker, session=session)
+            df = ticker_obj.history(period=period)
+            logger.info(f"Ticker object approach for {ticker}: {df.shape}")
+            
+            # Fallback to download if ticker object fails
+            if df.empty:
+                logger.info(f"Ticker object failed for {ticker}, trying download method")
+                df = yf.download(ticker, period=period, progress=False, auto_adjust=False)
+                logger.info(f"Download method for {ticker}: {df.shape}")
             
             if df.empty:
-                logger.warning(f"No data found for {ticker}")
+                logger.warning(f"No data found for {ticker} from either method")
                 return pd.DataFrame()
             
             # Handle MultiIndex columns (newer yfinance versions)
             if isinstance(df.columns, pd.MultiIndex):
+                logger.info(f"Handling MultiIndex columns for {ticker}")
                 df.columns = [col[0] for col in df.columns]
+            
+            # Ensure we have the required columns
+            required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
+            if not all(col in df.columns for col in required_cols):
+                logger.warning(f"Missing required columns for {ticker}: {df.columns}")
+                return pd.DataFrame()
+            
+            logger.info(f"Successfully fetched {len(df)} rows for {ticker} with columns: {list(df.columns)}")
             
             # Clean and validate data
             df = self._clean_data(df, ticker)
@@ -56,7 +92,7 @@ class DataLoader:
             if self.use_s3_cache and not df.empty:
                 self._save_to_cache(ticker, df)
             
-            logger.info(f"Fetched {len(df)} rows for {ticker}")
+            logger.info(f"Returning {len(df)} rows for {ticker}")
             return df
             
         except Exception as e:
@@ -64,7 +100,7 @@ class DataLoader:
             return pd.DataFrame()
     
     def fetch_batch(self, tickers: List[str], period: str = "1y", 
-                   batch_size: int = 50, max_workers: int = 5) -> Dict[str, pd.DataFrame]:
+                   batch_size: int = 3, max_workers: int = 1) -> Dict[str, pd.DataFrame]:
         """Fetch data for multiple tickers with batch processing and rate limiting"""
         results = {}
         
@@ -73,7 +109,7 @@ class DataLoader:
             batch_tickers = tickers[i:i + batch_size]
             logger.info(f"Processing batch {i//batch_size + 1}: {batch_tickers}")
             
-            # Use ThreadPoolExecutor for parallel processing
+            # Use ThreadPoolExecutor for parallel processing (reduced concurrency)
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 future_to_ticker = {
                     executor.submit(self.fetch_single_ticker, ticker, period): ticker 
@@ -89,9 +125,9 @@ class DataLoader:
                     except Exception as e:
                         logger.error(f"Error processing {ticker}: {str(e)}")
             
-            # Rate limiting - delay between batches
+            # Rate limiting - longer delay between batches
             if i + batch_size < len(tickers):
-                delay = random.uniform(1.0, 2.0)
+                delay = random.uniform(2.0, 4.0)
                 logger.info(f"Delaying {delay:.2f}s before next batch...")
                 time.sleep(delay)
         
@@ -100,10 +136,8 @@ class DataLoader:
     
     def fetch_universe(self, tickers: List[str], period: str = "1y") -> Dict[str, pd.DataFrame]:
         """Fetch data for entire universe with optimization for large sets"""
-        if len(tickers) <= 50:
-            return self.fetch_batch(tickers, period, batch_size=len(tickers))
-        else:
-            return self.fetch_batch(tickers, period, batch_size=50, max_workers=10)
+        # Always use very small batches to avoid rate limiting
+        return self.fetch_batch(tickers, period, batch_size=2, max_workers=1)
     
     def _get_from_cache(self, ticker: str) -> Optional[pd.DataFrame]:
         """Get data from S3 cache if available and fresh"""
@@ -122,7 +156,14 @@ class DataLoader:
             # Load cached data
             response = self.s3_client.get_object(Bucket=self.s3_bucket, Key=cache_key)
             import json
-            data = json.loads(response['Body'].read())
+            content = response['Body'].read().decode('utf-8')
+            
+            # Handle empty content
+            if not content.strip():
+                logger.warning(f"Empty cache content for {ticker}")
+                return None
+                
+            data = json.loads(content)
             df = pd.DataFrame(data['data'], columns=data['columns'], index=pd.to_datetime(data['index']))
             
             # Validate cache integrity

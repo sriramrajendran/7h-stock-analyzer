@@ -12,6 +12,10 @@ fi
 # Load environment variables
 export $(grep -v '^#' .env.local | xargs)
 
+# Override environment variables for local development
+export ENVIRONMENT=development
+export REACT_APP_ENVIRONMENT=development
+
 # Check AWS credentials
 if ! aws sts get-caller-identity &>/dev/null; then
     echo "❌ AWS credentials not configured. Please run 'aws configure'."

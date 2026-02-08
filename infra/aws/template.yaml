@@ -45,29 +45,6 @@ Resources:
           ENVIRONMENT: !Ref Environment
       Role: !GetAtt StockAnalyzerExecutionRole.Arn
       Events:
-        # EventBridge Scheduled Events - NEW: Non-disruptive addition
-        MarketOpenAlert:
-          Type: Schedule
-          Properties:
-            Schedule: cron(0 14 ? * MON-FRI *)
-            Name: !Sub "${AWS::StackName}-market-open-alert"
-            Description: "Daily market open alert at 9:00 AM EST (2:00 PM UTC)"
-            Enabled: true
-        MiddayAlert:
-          Type: Schedule
-          Properties:
-            Schedule: cron(30 17 ? * MON-FRI *)
-            Name: !Sub "${AWS::StackName}-midday-alert"
-            Description: "Daily midday alert at 12:30 PM EST (5:30 PM UTC)"
-            Enabled: true
-        WeeklyReconciliation:
-          Type: Schedule
-          Properties:
-            Schedule: cron(0 23 ? * SUN *)
-            Name: !Sub "${AWS::StackName}-weekly-reconciliation"
-            Description: "Weekly reconciliation Sunday 6:00 PM EST (11:00 PM UTC)"
-            Enabled: true
-        # Existing API Gateway Events - UNCHANGED
         ApiHealth:
           Type: HttpApi
           Properties:
@@ -146,6 +123,42 @@ Resources:
   StockDataBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Retain
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: alias/aws/s3
+            BucketKeyEnabled: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldDailyFiles
+            Status: Enabled
+            ExpirationInDays: 365
+          - Id: DeleteOldLogs
+            Status: Enabled
+            ExpirationInDays: 30
+          - Id: DeleteTempFiles
+            Status: Enabled
+            ExpirationInDays: 7
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - "Content-Type"
+              - "Authorization"
+              - "X-API-Key"
+            AllowedMethods:
+              - GET
+            AllowedOrigins:
+              - "http://7h-stock-analyzer.s3-website-us-east-1.amazonaws.com"
+              - "https://7h-stock-analyzer.s3-website-us-east-1.amazonaws.com"
+            MaxAgeSeconds: 3600
 
   StockDataBucketPolicy:
     Type: AWS::S3::BucketPolicy

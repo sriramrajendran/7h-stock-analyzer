@@ -163,6 +163,67 @@ def analyze_symbol(symbol: str, auth: bool = verify_api_key):
         raise HTTPException(status_code=500, detail=f"Failed to analyze symbol: {str(e)}")
 
 
+@app.get("/config/{config_type}")
+def get_config(config_type: str, auth: bool = Depends(verify_api_key)):
+    """Get configuration file content from S3"""
+    try:
+        from app.services.config_manager import load_config_from_s3
+        
+        # Always load from S3 - no local fallback
+        result = load_config_from_s3(config_type)
+        if not result['success']:
+            raise HTTPException(status_code=404, detail=result.get('error', 'Configuration not found'))
+            
+        return result
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get config: {str(e)}")
+
+
+@app.get("/config/{config_type}.json")
+def get_config_json(config_type: str, auth: bool = Depends(verify_api_key)):
+    """Get configuration as JSON (for frontend compatibility)"""
+    return get_config(config_type, auth)
+
+
+@app.get("/history/dates")
+def get_available_dates_endpoint(auth: bool = Depends(verify_api_key)):
+    """Get available historical dates"""
+    try:
+        from app.services.s3_store import get_available_dates
+        
+        result = get_available_dates()
+        if not result.get('success', False):
+            raise HTTPException(status_code=404, detail=result.get('error', 'Dates not available'))
+            
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get available dates: {str(e)}")
+
+
+@app.get("/history/{date}")
+def get_historical_recommendations(date: str, auth: bool = Depends(verify_api_key)):
+    """Get historical recommendations for a specific date"""
+    try:
+        from app.services.s3_store import get_historical_data
+        
+        result = get_historical_data(date)
+        if not result.get('success', False):
+            raise HTTPException(status_code=404, detail=result.get('error', 'Historical data not found'))
+            
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get historical data: {str(e)}")
+
+
 @app.get("/recommendations")
 def get_recommendations_fallback(auth: bool = verify_api_key):
     """Get latest recommendations from S3 - FALLBACK ONLY"""
@@ -171,6 +232,11 @@ def get_recommendations_fallback(auth: bool = verify_api_key):
         return get_latest_results()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get recommendations: {str(e)}")
+
+
+# Note: Mock S3 endpoints removed for AWS deployment safety
+# In local development, the frontend will use the /recommendations endpoint instead
+# This ensures no conflicts between local and AWS environments
 
 
 # Mangum adapter for Lambda

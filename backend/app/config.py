@@ -8,7 +8,10 @@ from typing import List
 
 # AWS Configuration
 AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
-S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME', '7h-stock-analyzer')
+if os.getenv('ENVIRONMENT') == 'production':
+    S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME_PROD', '7h-stock-analyzer')
+else:
+    S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME_LOCAL', '7h-stock-analyzer-dev')
 
 # Pushover Configuration
 PUSHOVER_TOKEN = os.getenv('PUSHOVER_TOKEN', '')

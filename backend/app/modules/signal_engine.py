@@ -4,8 +4,14 @@ Signal Engine Module - Generates individual indicator signals and aggregates int
 
 import pandas as pd
 import numpy as np
+import warnings
 from typing import Dict, List, Tuple, Optional
 import logging
+
+# Suppress TA library warnings and pandas deprecation warnings
+warnings.filterwarnings('ignore', category=RuntimeWarning, message='.*invalid value encountered in scalar divide.*')
+warnings.filterwarnings('ignore', category=FutureWarning, message='.*Downcasting object dtype arrays.*')
+pd.set_option('future.no_silent_downcasting', True)
 
 logger = logging.getLogger(__name__)
 
@@ -159,7 +165,7 @@ class SignalEngine:
                 df['Stoch_Signal'] = np.where(df['Stoch_K'] < 20, 1,
                                             np.where(df['Stoch_K'] > 80, -1, 0))
                 # Stochastic cross confirmation (handle None values)
-                stoch_d_filled = df['Stoch_D'].fillna(df['Stoch_K'])  # Fill None with Stoch_K
+                stoch_d_filled = df['Stoch_D'].fillna(df['Stoch_K']).infer_objects(copy=False)  # Fill None with Stoch_K
                 df['Stoch_Cross'] = np.where(df['Stoch_K'] > stoch_d_filled, 1, -1)
             else:
                 df['Stoch_Signal'] = 0

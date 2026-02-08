@@ -10,7 +10,7 @@
 
 @layer components {
   .btn {
-    @apply px-4 py-2 rounded-md font-medium transition-colors duration-200;
+    @apply px-2 sm:px-4 py-1 sm:py-2 rounded-md font-medium transition-colors duration-200 text-xs sm:text-sm;
   }
   
   .btn-primary {
@@ -30,11 +30,11 @@
   }
   
   .card {
-    @apply bg-white rounded-lg shadow-md p-6;
+    @apply bg-white rounded-lg shadow-md p-3 sm:p-6;
   }
   
   .recommendation-card {
-    @apply border-l-4 p-4 rounded-r-lg mb-4;
+    @apply border-l-4 p-3 sm:p-4 rounded-r-lg mb-4;
   }
   
   .recommendation-buy {

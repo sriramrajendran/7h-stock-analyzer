@@ -12,24 +12,24 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Configuration
-BUCKET_NAME = os.getenv('S3_BUCKET_NAME', 'stock-analyzer-local')
+# For local development, use dev bucket; for AWS, use production bucket
+if os.getenv('ENVIRONMENT') == 'production':
+    BUCKET_NAME = os.getenv('S3_BUCKET_NAME_PROD', '7h-stock-analyzer')
+else:
+    BUCKET_NAME = os.getenv('S3_BUCKET_NAME_LOCAL', os.getenv('S3_BUCKET_NAME', '7h-stock-analyzer-dev'))
+
 AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
 
 # Initialize S3 client
 s3_client = boto3.client('s3')
 
-# Config file mappings
-CONFIG_FILES = {
-    'portfolio': 'input/config_portfolio.txt',
-    'watchlist': 'input/config_watchlist.txt',
-    'us_stocks': 'input/config_us_stocks.txt',
-    'etfs': 'input/config_etfs.txt'
-}
+# Config file mapping - single consolidated file
+CONFIG_FILE = 'config.json'
 
 
 def load_config_from_s3(config_type: str) -> Dict[str, Any]:
     """
-    Load configuration from S3 with enhanced error handling
+    Load configuration from consolidated JSON file in S3
     
     Args:
         config_type: Type of config ('portfolio', 'watchlist', 'us_stocks', 'etfs')
@@ -38,48 +38,71 @@ def load_config_from_s3(config_type: str) -> Dict[str, Any]:
         Dict with success status and symbols list
     """
     try:
-        if config_type not in CONFIG_FILES:
+        # Validate config type
+        valid_types = ['portfolio', 'watchlist', 'us_stocks', 'etfs']
+        if config_type not in valid_types:
             return {'success': False, 'error': f'Invalid config type: {config_type}'}
         
-        config_file = CONFIG_FILES[config_type]
-        key = f'config/{config_file}'
+        key = CONFIG_FILE
         
         try:
             response = s3_client.get_object(Bucket=BUCKET_NAME, Key=key)
             content = response['Body'].read().decode('utf-8')
             
-            symbols = []
-            for line in content.split('\n'):
-                line = line.strip()
-                if line and not line.startswith('#') and not line.startswith('//'):
-                    symbols.append(line.upper().strip())
+            # Parse JSON content
+            import json
+            config_data = json.loads(content)
+            
+            # Validate JSON structure
+            if not isinstance(config_data, dict) or 'configurations' not in config_data:
+                return {'success': False, 'error': 'Invalid JSON configuration format'}
+            
+            configurations = config_data.get('configurations', {})
+            if config_type not in configurations:
+                return {'success': False, 'error': f'Configuration type {config_type} not found in consolidated config'}
+            
+            category_config = configurations[config_type]
+            if not isinstance(category_config, dict) or 'symbols' not in category_config:
+                return {'success': False, 'error': f'Invalid configuration structure for {config_type}'}
+            
+            symbols = category_config.get('symbols', [])
+            if not isinstance(symbols, list):
+                return {'success': False, 'error': f'Symbols must be a list for {config_type}'}
+            
+            # Clean up symbols (remove empty strings, convert to uppercase)
+            clean_symbols = [symbol.strip().upper() for symbol in symbols if symbol.strip()]
             
             return {
                 'success': True,
                 'config_type': config_type,
-                'symbols': symbols,
-                'count': len(symbols),
+                'symbols': clean_symbols,
+                'count': len(clean_symbols),
+                'name': category_config.get('name', config_type.title()),
+                'description': category_config.get('description', ''),
                 'source': 's3',
-                'last_modified': response['LastModified'].isoformat()
+                'last_modified': response['LastModified'].isoformat(),
+                'config_last_updated': config_data.get('last_updated', '')
             }
             
         except ClientError as e:
             if e.response['Error']['Code'] == 'NoSuchKey':
-                # Config doesn't exist in S3, try local file
-                return load_config_from_local(config_type)
+                return {'success': False, 'error': f'Configuration file {key} not found in S3'}
+            elif e.response['Error']['Code'] == 'NoSuchBucket':
+                return {'success': False, 'error': f'S3 bucket {BUCKET_NAME} not found'}
             else:
-                logger.error(f"S3 error loading config: {str(e)}")
+                logger.warning(f"S3 error loading config: {str(e)}")
                 return {'success': False, 'error': f'S3 error: {str(e)}'}
+        except json.JSONDecodeError as e:
+            return {'success': False, 'error': f'Invalid JSON in configuration file: {str(e)}'}
                 
     except Exception as e:
         logger.error(f"Error loading config from S3: {str(e)}")
-        # Fallback to local config on any error
-        return load_config_from_local(config_type)
+        return {'success': False, 'error': f'Failed to load configuration: {str(e)}'}
 
 
 def load_config_from_local(config_type: str) -> Dict[str, Any]:
     """
-    Load configuration from local file
+    Load configuration from local consolidated JSON file
     
     Args:
         config_type: Type of config ('portfolio', 'watchlist', 'us_stocks', 'etfs')
@@ -88,26 +111,51 @@ def load_config_from_local(config_type: str) -> Dict[str, Any]:
         Dict with success status and symbols list
     """
     try:
-        if config_type not in CONFIG_FILES:
+        # Validate config type
+        valid_types = ['portfolio', 'watchlist', 'us_stocks', 'etfs']
+        if config_type not in valid_types:
             return {'success': False, 'error': f'Invalid config type: {config_type}'}
         
-        config_file = CONFIG_FILES[config_type]
+        config_file = CONFIG_FILE
         
         if not os.path.exists(config_file):
-            return {'success': False, 'error': f'Config file not found: {config_file}'}
+            return {'success': False, 'error': f'Configuration file {config_file} not found'}
         
-        symbols = []
         with open(config_file, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#') and not line.startswith('//'):
-                    symbols.append(line.upper().strip())
+            content = f.read()
+        
+        # Parse JSON content
+        import json
+        config_data = json.loads(content)
+        
+        # Validate JSON structure
+        if not isinstance(config_data, dict) or 'configurations' not in config_data:
+            return {'success': False, 'error': 'Invalid JSON configuration format'}
+        
+        configurations = config_data.get('configurations', {})
+        if config_type not in configurations:
+            return {'success': False, 'error': f'Configuration type {config_type} not found in consolidated config'}
+        
+        category_config = configurations[config_type]
+        if not isinstance(category_config, dict) or 'symbols' not in category_config:
+            return {'success': False, 'error': f'Invalid configuration structure for {config_type}'}
+        
+        symbols = category_config.get('symbols', [])
+        if not isinstance(symbols, list):
+            return {'success': False, 'error': f'Symbols must be a list for {config_type}'}
+        
+        # Clean up symbols (remove empty strings, convert to uppercase)
+        clean_symbols = [symbol.strip().upper() for symbol in symbols if symbol.strip()]
         
         return {
             'success': True,
             'config_type': config_type,
-            'symbols': symbols,
-            'count': len(symbols)
+            'symbols': clean_symbols,
+            'count': len(clean_symbols),
+            'name': category_config.get('name', config_type.title()),
+            'description': category_config.get('description', ''),
+            'source': 'local',
+            'config_last_updated': config_data.get('last_updated', '')
         }
         
     except Exception as e:
@@ -116,7 +164,7 @@ def load_config_from_local(config_type: str) -> Dict[str, Any]:
 
 def update_config_in_s3(config_type: str, symbols: List[str], backup: bool = True) -> Dict[str, Any]:
     """
-    Update configuration in S3 with enhanced security and validation
+    Update configuration in consolidated S3 JSON file
     
     Args:
         config_type: Type of config to update
@@ -127,7 +175,9 @@ def update_config_in_s3(config_type: str, symbols: List[str], backup: bool = Tru
         Dict with success status
     """
     try:
-        if config_type not in CONFIG_FILES:
+        # Validate config type
+        valid_types = ['portfolio', 'watchlist', 'us_stocks', 'etfs']
+        if config_type not in valid_types:
             return {'success': False, 'error': f'Invalid config type: {config_type}'}
         
         # Validate symbols before updating
@@ -135,8 +185,7 @@ def update_config_in_s3(config_type: str, symbols: List[str], backup: bool = Tru
         if not validation_result['success']:
             return {'success': False, 'error': 'Symbol validation failed'}
         
-        config_file = CONFIG_FILES[config_type]
-        key = f'config/{config_file}'
+        key = CONFIG_FILE
         
         # Backup existing config if requested
         if backup:
@@ -144,23 +193,52 @@ def update_config_in_s3(config_type: str, symbols: List[str], backup: bool = Tru
             if not backup_result['success']:
                 logger.warning(f"Failed to backup config: {backup_result['error']}")
         
-        # Prepare new config content
-        content = "# Stock Configuration\n"
-        content += f"# Updated: {datetime.utcnow().isoformat()}\n"
-        content += "# Format: One symbol per line\n"
-        content += "# Lines starting with # are ignored\n\n"
+        # Load existing consolidated config
+        try:
+            response = s3_client.get_object(Bucket=BUCKET_NAME, Key=key)
+            existing_content = response['Body'].read().decode('utf-8')
+            import json
+            config_data = json.loads(existing_content)
+        except:
+            # Create new config if doesn't exist
+            config_data = {
+                'success': True,
+                'last_updated': datetime.utcnow().isoformat(),
+                'description': 'Consolidated stock configuration for 7H Stock Analyzer',
+                'configurations': {},
+                'total_symbols': 0,
+                'categories': 0
+            }
         
-        # Add only valid symbols
+        # Update the specific configuration type
+        if 'configurations' not in config_data:
+            config_data['configurations'] = {}
+        
+        # Get valid symbols
         valid_symbols = validation_result['valid_symbols']
-        for symbol in valid_symbols:
-            content += f"{symbol}\n"
         
-        # Upload to S3 with encryption
+        # Update the configuration
+        config_data['configurations'][config_type] = {
+            'name': config_type.title().replace('_', ' '),
+            'description': f'{config_type.title().replace('_', ' ')} stocks',
+            'symbols': valid_symbols,
+            'count': len(valid_symbols),
+            'last_updated': datetime.utcnow().isoformat()
+        }
+        
+        # Update totals
+        total_symbols = sum(len(config['symbols']) for config in config_data['configurations'].values())
+        config_data['total_symbols'] = total_symbols
+        config_data['categories'] = len(config_data['configurations'])
+        config_data['last_updated'] = datetime.utcnow().isoformat()
+        
+        # Upload updated config to S3
+        updated_content = json.dumps(config_data, indent=2)
         s3_client.put_object(
             Bucket=BUCKET_NAME,
             Key=key,
-            Body=content,
-            ContentType='text/plain',
+            Body=updated_content,
+            ContentType='application/json',
             ServerSideEncryption='AES256'
         )
         
@@ -183,7 +261,7 @@ def update_config_in_s3(config_type: str, symbols: List[str], backup: bool = Tru
 
 def backup_config_in_s3(config_type: str) -> Dict[str, Any]:
     """
-    Backup existing configuration in S3 with encryption
+    Backup existing consolidated configuration in S3
     
     Args:
         config_type: Type of config to backup
@@ -192,11 +270,12 @@ def backup_config_in_s3(config_type: str) -> Dict[str, Any]:
         Dict with success status
     """
     try:
-        if config_type not in CONFIG_FILES:
+        # Validate config type
+        valid_types = ['portfolio', 'watchlist', 'us_stocks', 'etfs']
+        if config_type not in valid_types:
             return {'success': False, 'error': f'Invalid config type: {config_type}'}
         
-        config_file = CONFIG_FILES[config_type]
-        key = f'config/{config_file}'
+        key = CONFIG_FILE
         
         # Check if config exists
         try:
@@ -205,59 +284,74 @@ def backup_config_in_s3(config_type: str) -> Dict[str, Any]:
             
             # Create backup with timestamp
             timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
-            backup_key = f'config/backups/{config_type}_{timestamp}.txt'
+            backup_key = f'config/backups/config_{timestamp}.json'
             
             s3_client.put_object(
                 Bucket=BUCKET_NAME,
                 Key=backup_key,
                 Body=content,
-                ContentType='text/plain',
+                ContentType='application/json',
                 ServerSideEncryption='AES256'
             )
             
-            logger.info(f"Successfully backed up {config_type} config to {backup_key}")
+            logger.info(f"Successfully backed up config to {backup_key}")
             
             return {
                 'success': True,
                 'backup_key': backup_key,
-                'message': f'Successfully backed up {config_type} config'
+                'message': f'Successfully backed up consolidated config'
             }
             
         except ClientError as e:
             if e.response['Error']['Code'] == 'NoSuchKey':
                 return {'success': True, 'message': 'No existing config to backup'}
             else:
-                logger.error(f"S3 error backing up config: {str(e)}")
-                return {'success': False, 'error': f'S3 error: {str(e)}'}
+                raise e
                 
     except Exception as e:
         logger.error(f"Error backing up config: {str(e)}")
-        return {'success': False, 'error': f'Error backing up config: {str(e)}'}
+        return {'success': False, 'error': f'Failed to backup config: {str(e)}'}
 
 
 def get_all_configs() -> Dict[str, Any]:
     """
-    Get all configurations with metadata
+    Get all configurations from consolidated JSON file
     
     Returns:
         Dict with all config types and their symbols
     """
-    configs = {}
-    total_symbols = 0
-    
-    for config_type in CONFIG_FILES.keys():
-        result = load_config_from_s3(config_type)
-        configs[config_type] = result
-        if result['success']:
-            total_symbols += result['count']
-    
-    return {
-        'success': True,
-        'configs': configs,
-        'available_types': list(CONFIG_FILES.keys()),
-        'total_symbols': total_symbols,
-        'timestamp': datetime.utcnow().isoformat()
-    }
+    try:
+        key = CONFIG_FILE
+        
+        try:
+            response = s3_client.get_object(Bucket=BUCKET_NAME, Key=key)
+            content = response['Body'].read().decode('utf-8')
+            
+            import json
+            config_data = json.loads(content)
+            
+            return {
+                'success': True,
+                'config_data': config_data,
+                'configurations': config_data.get('configurations', {}),
+                'total_symbols': config_data.get('total_symbols', 0),
+                'categories': config_data.get('categories', 0),
+                'last_updated': config_data.get('last_updated', ''),
+                'timestamp': datetime.utcnow().isoformat()
+            }
+            
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'NoSuchKey':
+                return {
+                    'success': False,
+                    'error': f'Configuration file {key} not found in S3'
+                }
+            else:
+                raise e
+                
+    except Exception as e:
+        logger.error(f"Error getting all configs: {str(e)}")
+        return {'success': False, 'error': f'Failed to get configurations: {str(e)}'}
 
 
 def validate_symbols(symbols: List[str]) -> Dict[str, Any]:
@@ -320,61 +414,42 @@ def validate_symbols(symbols: List[str]) -> Dict[str, Any]:
 
 def sync_configs_to_local() -> Dict[str, Any]:
     """
-    Sync all configurations from S3 to local files
+    Sync consolidated configuration from S3 to local JSON file
     
     Returns:
         Dict with sync results
     """
     try:
-        results = {}
-        synced_count = 0
+        key = CONFIG_FILE
         
-        for config_type in CONFIG_FILES.keys():
-            # Load from S3
-            s3_result = load_config_from_s3(config_type)
-            
-            if s3_result['success']:
-                # Write to local file
-                config_file = CONFIG_FILES[config_type]
-                
-                # Create directory if it doesn't exist
-                os.makedirs(os.path.dirname(config_file), exist_ok=True)
-                
-                # Prepare content
-                content = "# Stock Configuration\n"
-                content += f"# Synced from S3: {datetime.utcnow().isoformat()}\n"
-                content += "# Format: One symbol per line\n"
-                content += "# Lines starting with # are ignored\n\n"
-                
-                for symbol in s3_result['symbols']:
-                    content += f"{symbol}\n"
+        # Load from S3
+        s3_result = load_config_from_s3('portfolio')  # Just to check if S3 is accessible
+        
+        if s3_result['success'] or 'Configuration file' not in s3_result.get('error', ''):
+            # Get the full consolidated config
+            try:
+                response = s3_client.get_object(Bucket=BUCKET_NAME, Key=key)
+                content = response['Body'].read().decode('utf-8')
                 
                 # Write to local file
-                with open(config_file, 'w') as f:
+                os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+                with open(CONFIG_FILE, 'w') as f:
                     f.write(content)
                 
-                results[config_type] = {
+                logger.info(f"Synced consolidated config from S3 to local file: {CONFIG_FILE}")
+                
+                return {
                     'success': True,
-                    'symbols_count': s3_result['count'],
-                    'local_file': config_file,
-                    'source': s3_result.get('source', 's3')
+                    'local_file': CONFIG_FILE,
+                    'source': 's3',
+                    'message': 'Successfully synced consolidated configuration'
                 }
-                synced_count += 1
-            else:
-                results[config_type] = {
-                    'success': False,
-                    'error': s3_result['error']
-                }
-        
-        logger.info(f"Synced {synced_count} configurations from S3 to local files")
-        
-        return {
-            'success': True,
-            'synced_count': synced_count,
-            'total_count': len(CONFIG_FILES),
-            'results': results
-        }
-        
+                
+            except Exception as e:
+                return {'success': False, 'error': f'Failed to sync from S3: {str(e)}'}
+        else:
+            return {'success': False, 'error': 'S3 configuration not accessible'}
+            
     except Exception as e:
         logger.error(f"Sync error: {str(e)}")
         return {
@@ -385,7 +460,7 @@ def sync_configs_to_local() -> Dict[str, Any]:
 
 def save_config_to_local(config_type: str, symbols: List[str]) -> Dict[str, Any]:
     """
-    Save configuration to local file
+    Save configuration to local consolidated JSON file
     
     Args:
         config_type: Type of config to save
@@ -395,39 +470,61 @@ def save_config_to_local(config_type: str, symbols: List[str]) -> Dict[str, Any]
         Dict with success status
     """
     try:
-        if config_type not in CONFIG_FILES:
+        # Validate config type
+        valid_types = ['portfolio', 'watchlist', 'us_stocks', 'etfs']
+        if config_type not in valid_types:
             return {'success': False, 'error': f'Invalid config type: {config_type}'}
         
-        config_file = CONFIG_FILES[config_type]
+        # Load existing config or create new
+        config_data = {}
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, 'r') as f:
+                import json
+                config_data = json.load(f)
+        else:
+            config_data = {
+                'success': True,
+                'last_updated': datetime.utcnow().isoformat(),
+                'description': 'Consolidated stock configuration for 7H Stock Analyzer',
+                'configurations': {},
+                'total_symbols': 0,
+                'categories': 0
+            }
         
-        # Create directory if it doesn't exist
-        os.makedirs(os.path.dirname(config_file), exist_ok=True)
+        # Update the specific configuration
+        if 'configurations' not in config_data:
+            config_data['configurations'] = {}
         
-        # Prepare content
-        content = "# Stock Configuration\n"
-        content += f"# Updated: {datetime.utcnow().isoformat()}\n"
-        content += "# Format: One symbol per line\n"
-        content += "# Lines starting with # are ignored\n\n"
+        config_data['configurations'][config_type] = {
+            'name': config_type.title().replace('_', ' '),
+            'description': f'{config_type.title().replace('_', ' ')} stocks',
+            'symbols': symbols,
+            'count': len(symbols),
+            'last_updated': datetime.utcnow().isoformat()
+        }
         
-        for symbol in symbols:
-            symbol = symbol.upper().strip()
-            if symbol and len(symbol) > 0:
-                content += f"{symbol}\n"
+        # Update totals
+        total_symbols = sum(len(config['symbols']) for config in config_data['configurations'].values())
+        config_data['total_symbols'] = total_symbols
+        config_data['categories'] = len(config_data['configurations'])
+        config_data['last_updated'] = datetime.utcnow().isoformat()
         
         # Write to local file
-        with open(config_file, 'w') as f:
-            f.write(content)
+        os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+        with open(CONFIG_FILE, 'w') as f:
+            import json
+            json.dump(config_data, f, indent=2)
         
         return {
             'success': True,
             'config_type': config_type,
             'symbols_count': len(symbols),
-            'local_file': config_file
+            'local_file': CONFIG_FILE,
+            'total_symbols': total_symbols
         }
         
     except Exception as e:
-        logger.error(f"Error saving local config: {str(e)}")
-        return {'success': False, 'error': f'Error saving local config: {str(e)}'}
+        return {'success': False, 'error': f'Failed to save local config: {str(e)}'}
 
 
 def get_config_history(config_type: str, limit: int = 10) -> Dict[str, Any]:
