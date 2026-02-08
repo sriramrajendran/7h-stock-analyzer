@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { s3Api } from '../services/api'
+import { api } from '../services/api'
 import EnhancedRecommendationTable from '../components/EnhancedRecommendationTable'
 
 const History = () => {
@@ -19,7 +19,7 @@ const History = () => {
       setError(null)
       
       // Get real dates from API
-      const response = await s3Api.listAvailableDates()
+      const response = await api.listAvailableDates()
       const dates = response.dates || []
       
       setAvailableDates(dates)
@@ -41,7 +41,7 @@ const History = () => {
       setLoading(true)
       setError(null)
       // Use enhanced endpoint to get reconciliation data
-      const data = await s3Api.getHistoricalRecommendationsEnhanced(date)
+      const data = await api.getHistoricalRecommendationsEnhanced(date)
       setHistoricalData(data)
     } catch (err) {
       setError(err.message)

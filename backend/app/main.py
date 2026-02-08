@@ -11,14 +11,42 @@ import json
 from datetime import datetime
 from dataclasses import dataclass
 
-from app.engine.modular_recommender import run_modular_analysis, run_single_analysis
-from app.api.single_analysis import router as analysis_router
-# Removed complex security import - using simple auth
+# Try to import heavy dependencies, but provide fallbacks
+try:
+    from app.engine.modular_recommender import run_modular_analysis, run_single_analysis
+    HEAVY_DEPENDENCIES_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Heavy dependencies not available: {e}")
+    HEAVY_DEPENDENCIES_AVAILABLE = False
+    
+    # Fallback implementations when heavy dependencies aren't available
+    def run_modular_analysis():
+        """Fallback analysis when numpy/pandas aren't available"""
+        return {
+            "success": False,
+            "error": "Heavy dependencies (numpy/pandas) not available",
+            "message": "Lambda layer needs to be updated with proper dependencies",
+            "recommendations": [],
+            "timestamp": datetime.utcnow().isoformat(),
+            "fallback": True
+        }
+    
+    def run_single_analysis(symbol):
+        """Fallback single analysis when numpy/pandas aren't available"""
+        return {
+            "success": False,
+            "error": "Heavy dependencies (numpy/pandas) not available",
+            "message": "Lambda layer needs to be updated with proper dependencies",
+            "symbol": symbol,
+            "timestamp": datetime.utcnow().isoformat(),
+            "fallback": True
+        }
+
 from app.services.s3_store import persist_results
 from app.services.pushover import send_push_notification
 from app.services.config_manager import (
     load_config_from_s3, update_config_in_s3, get_all_configs,
-    validate_symbols, sync_configs_to_local
+    validate_symbols
 )
 from app.logging_middleware import CostOptimizedLoggingMiddleware, StructuredErrorLoggingMiddleware
 from app.simple_auth import verify_api_key
@@ -55,9 +83,12 @@ app = FastAPI(
     version="2.0.0"
 )
 
-# Include API routers
-app.include_router(analysis_router)
-# Removed complex security router - using simple API key auth
+# Include API routers with error handling
+try:
+    from app.api.single_analysis import router as analysis_router
+    app.include_router(analysis_router)
+except ImportError as e:
+    logger.error(f"Could not import analysis router: {e}")
 
 # Add CORS middleware for local development
 app.add_middleware(
@@ -71,71 +102,6 @@ app.add_middleware(
 # Add cost-optimized logging middleware
 app.add_middleware(CostOptimizedLoggingMiddleware)
 app.add_middleware(StructuredErrorLoggingMiddleware)
-
-
-@app.get("/recon/summary")
-def get_recon_summary(auth: bool = verify_api_key):
-    """Get reconciliation summary showing profit/stop loss performance"""
-    try:
-        from app.services.recon_service import ReconService
-        recon_service = ReconService()
-        summary = recon_service.get_recon_summary(days=30)
-        return summary
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get recon summary: {str(e)}")
-
-
-@app.get("/recon/daily/{date}")
-def get_daily_recon(date: str, auth: bool = verify_api_key):
-    """Get daily reconciliation data for specific date (YYYY-MM-DD)"""
-    try:
-        from app.services.recon_service import ReconService
-        recon_service = ReconService()
-        
-        # Get specific daily recon file
-        recon_key = f'recon/daily/{date}.json'
-        response = recon_service.s3_client.get_object(
-            Bucket=recon_service.bucket_name,
-            Key=recon_key
-        )
-        return json.loads(response['Body'].read().decode('utf-8'))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get daily recon: {str(e)}")
-
-
-@app.post("/recon/run")
-def run_reconciliation(auth: bool = verify_api_key):
-    """Manual trigger for daily reconciliation"""
-    try:
-        from app.services.recon_service import run_daily_reconciliation
-        result = run_daily_reconciliation()
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to run reconciliation: {str(e)}")
-
-
-@app.get("/history/{date}/enhanced")
-def get_historical_recommendations_enhanced(date: str, auth: bool = verify_api_key):
-    """Get historical recommendations with reconciliation data for a specific date (YYYY-MM-DD)"""
-    try:
-        # Check if enhanced historical data exists in S3 website path first
-        from app.services.s3_store import s3_client, BUCKET_NAME
-        import os
-        
-        enhanced_key = f'data/enhanced/{date}.json'
-        try:
-            response = s3_client.get_object(Bucket=BUCKET_NAME, Key=enhanced_key)
-            enhanced_data = json.loads(response['Body'].read().decode('utf-8'))
-            return enhanced_data
-        except s3_client.exceptions.NoSuchKey:
-            # Fallback to generating enhanced data on-the-fly
-            from app.services.s3_store import get_historical_results, persist_enhanced_historical_data
-            enhanced_data = get_historical_results(date, include_recon=True)
-            # Persist for future direct S3 access
-            persist_enhanced_historical_data(date, enhanced_data)
-            return enhanced_data
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get enhanced historical data: {str(e)}")
 
 
 @app.get("/health")
@@ -180,64 +146,6 @@ def run_now(auth: bool = verify_api_key):
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 
-@app.get("/recommendations")
-def get_recommendations(auth: bool = verify_api_key):
-    """Get latest recommendations from S3"""
-    try:
-        from app.services.s3_store import get_latest_results
-        return get_latest_results()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get recommendations: {str(e)}")
-
-
-@app.get("/history/dates")
-def get_available_dates(auth: bool = verify_api_key):
-    """Get list of available dates with historical recommendations"""
-    try:
-        from app.services.s3_store import get_available_dates
-        dates = get_available_dates()
-        return {
-            "dates": dates,
-            "count": len(dates)
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get available dates: {str(e)}")
-
-
-@app.get("/history/{date}")
-def get_historical_recommendations(date: str, auth: bool = verify_api_key):
-    """Get historical recommendations for a specific date (YYYY-MM-DD)"""
-    try:
-        from app.services.s3_store import get_historical_results
-        return get_historical_results(date)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get historical data: {str(e)}")
-
-
-@app.get("/config/{config_type}")
-def get_config(config_type: str, auth: bool = verify_api_key):
-    """Get configuration for a specific type"""
-    try:
-        result = load_config_from_s3(config_type)
-        if not result['success']:
-            raise HTTPException(status_code=404, detail=result['error'])
-        return result
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get config: {str(e)}")
-
-
-@app.get("/config")
-def get_all_configurations(auth: bool = verify_api_key):
-    """Get all configurations"""
-    try:
-        result = get_all_configs()
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get configurations: {str(e)}")
-
-
 @app.post("/config/update")
 def update_configuration(request: ConfigUpdateRequest, auth: bool = verify_api_key):
     """Update configuration for a specific type"""
@@ -262,14 +170,35 @@ def validate_symbols_endpoint(request: ConfigValidationRequest, auth: bool = ver
         raise HTTPException(status_code=500, detail=f"Failed to validate symbols: {str(e)}")
 
 
-@app.post("/config/sync")
-def sync_configurations(auth: bool = verify_api_key):
-    """Sync configurations from S3 to local files"""
+@app.post("/recon/run")
+def run_reconciliation(auth: bool = verify_api_key):
+    """Manual trigger for daily reconciliation"""
     try:
-        result = sync_configs_to_local()
+        from app.services.recon_service import run_daily_reconciliation
+        result = run_daily_reconciliation()
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to sync configurations: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to run reconciliation: {str(e)}")
+
+
+@app.post("/analysis/{symbol}")
+def analyze_symbol(symbol: str, auth: bool = verify_api_key):
+    """Analyze a single stock symbol"""
+    try:
+        result = run_single_analysis(symbol)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to analyze symbol: {str(e)}")
+
+
+@app.get("/recommendations")
+def get_recommendations_fallback(auth: bool = verify_api_key):
+    """Get latest recommendations from S3 - FALLBACK ONLY"""
+    try:
+        from app.services.s3_store import get_latest_results
+        return get_latest_results()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get recommendations: {str(e)}")
 
 
 # Mangum adapter for Lambda

@@ -1,16 +1,38 @@
 #!/bin/bash
 set -e
 
-echo "🎨 Deploying frontend to S3..."
+# Parse command line arguments
+QUICK_MODE=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --quick)
+            QUICK_MODE=true
+            shift
+            ;;
+        *)
+            if [ -z "$ENVIRONMENT" ]; then
+                ENVIRONMENT=$1
+            else
+                echo "Unknown option: $1"
+                echo "Usage: $0 [--quick] [dev|staging|prod]"
+                exit 1
+            fi
+            shift
+            ;;
+    esac
+done
 
 # Check if environment is provided
-if [ -z "$1" ]; then
+if [ -z "$ENVIRONMENT" ]; then
     echo "❌ Environment not specified"
-    echo "Usage: ./infra/aws/deploy_frontend.sh [dev|staging|prod]"
+    echo "Usage: $0 [--quick] [dev|staging|prod]"
     exit 1
 fi
 
-ENVIRONMENT=$1
+if [ "$QUICK_MODE" = true ]; then
+    echo "⚡ Quick mode enabled - Optimized frontend update"
+fi
 
 # Load environment variables
 if [ ! -f ../../.env.local ]; then
@@ -34,17 +56,140 @@ echo "  Region: $AWS_REGION"
 
 # Check if bucket exists
 if ! aws s3 ls "s3://$BUCKET_NAME" &>/dev/null; then
-    echo "🪣 Creating S3 bucket: $BUCKET_NAME"
-    aws s3 mb "s3://$BUCKET_NAME" --region $AWS_REGION
-    
-    # Configure bucket for static website hosting
-    aws s3 website "s3://$BUCKET_NAME" \
-        --index-document index.html \
-        --error-document error.html
-    
-    echo "✅ Created and configured S3 bucket"
+    if [ "$QUICK_MODE" = true ]; then
+        echo "❌ Quick mode requires existing S3 bucket. Bucket '$BUCKET_NAME' not found."
+        echo "💡 Please run full deployment first: ./deploy_frontend.sh $ENVIRONMENT"
+        exit 1
+    else
+        echo "🪣 Creating S3 bucket: $BUCKET_NAME"
+        aws s3 mb "s3://$BUCKET_NAME" --region $AWS_REGION
+        
+        # Configure bucket for static website hosting
+        aws s3 website "s3://$BUCKET_NAME" \
+            --index-document index.html \
+            --error-document error.html
+        
+        echo "✅ Created and configured S3 bucket"
+    fi
 else
     echo "ℹ️  S3 bucket already exists"
+fi
+
+# Quick mode: Skip CloudFront setup and do optimized S3 sync
+if [ "$QUICK_MODE" = true ]; then
+    echo "⚡ Quick Frontend Update Mode"
+    echo "  Skipping CloudFront setup..."
+    echo "  Performing optimized S3 sync..."
+    echo "⚡ Quick Frontend Update Mode"
+    echo "  Skipping CloudFront setup..."
+    echo "  Performing optimized S3 sync..."
+    
+    # Build frontend
+    echo "🔨 Building frontend..."
+    cd ../../frontend
+    
+    # Install dependencies if needed
+    if [ ! -d "node_modules" ]; then
+        echo "📦 Installing dependencies..."
+        npm install
+    fi
+    
+    # Update environment variables for production
+    echo "📝 Updating environment variables..."
+    cat > .env.production << EOF
+REACT_APP_S3_BUCKET=$S3_BUCKET_NAME_PROD
+REACT_APP_API_BASE_URL=$REACT_APP_API_BASE_URL_AWS
+REACT_APP_S3_REGION=$AWS_REGION
+REACT_APP_ENVIRONMENT=$ENVIRONMENT
+REACT_APP_S3_BUCKET_URL=https://7h-stock-analyzer.s3.$AWS_REGION.amazonaws.com
+REACT_APP_CLOUDFRONT_URL=https://$CLOUDFRONT_DOMAIN
+EOF
+
+    # Build for production with explicit environment variable
+    echo "  Building production bundle..."
+    export REACT_APP_API_BASE_URL=$REACT_APP_API_BASE_URL_AWS
+    npm run build
+    
+    if [ ! -d "dist" ]; then
+        echo " Build failed - dist directory not found"
+        exit 1
+    fi
+    
+    # Optimized S3 sync with cache control
+    echo "📤 Deploying to S3 with optimized sync..."
+    aws s3 sync dist/ "s3://$BUCKET_NAME/" \
+        --delete \
+        --cache-control "max-age=31536000,public" \
+        --exclude "*.html" \
+        --exclude "service-worker.js" \
+        --exclude "manifest.json"
+    
+    # Sync HTML files with shorter cache time
+    aws s3 sync dist/ "s3://$BUCKET_NAME/" \
+        --delete \
+        --cache-control "max-age=0,no-cache,no-store,must-revalidate" \
+        --exclude "*" \
+        --include "*.html"
+    
+    # Sync service worker and manifest with specific cache
+    aws s3 sync dist/ "s3://$BUCKET_NAME/" \
+        --delete \
+        --cache-control "max-age=86400,public" \
+        --exclude "*" \
+        --include "service-worker.js" \
+        --include "manifest.json"
+    
+    # Get existing CloudFront distribution (if any)
+    DISTRIBUTION_ID=$(aws cloudfront list-distributions \
+        --query "DistributionList.Items[?Comment=='$BUCKET_NAME frontend'].Id" \
+        --output text)
+    
+    if [ -n "$DISTRIBUTION_ID" ] && [ "$DISTRIBUTION_ID" != "None" ]; then
+        echo "🌐 Found CloudFront distribution: $DISTRIBUTION_ID"
+        echo "🔄 Creating selective invalidation..."
+        
+        # Create invalidation for HTML files and service worker
+        INVALIDATION_ID=$(aws cloudfront create-invalidation \
+            --distribution-id $DISTRIBUTION_ID \
+            --paths "/index.html" "/service-worker.js" "/manifest.json" "/*.js" "/*.css" \
+            --query 'Invalidation.Id' \
+            --output text)
+        
+        echo "⏳ Waiting for invalidation to complete..."
+        aws cloudfront wait invalidation-completed \
+            --distribution-id $DISTRIBUTION_ID \
+            --id $INVALIDATION_ID
+        
+        echo "✅ CloudFront invalidation completed"
+        
+        # Get CloudFront domain name
+        CLOUDFRONT_DOMAIN=$(aws cloudfront get-distribution \
+            --id $DISTRIBUTION_ID \
+            --query 'Distribution.DomainName' \
+            --output text)
+    else
+        echo "⚠️  No CloudFront distribution found"
+        CLOUDFRONT_DOMAIN="$BUCKET_NAME.s3-website-$AWS_REGION.amazonaws.com"
+    fi
+    
+    cd ../..
+    
+    echo ""
+    echo "🎉 Quick Frontend deployment completed!"
+    echo "⚡ Deployment time: ~1-2 minutes (vs 3-5 minutes for full deployment)"
+    echo ""
+    echo "📋 Quick deployment info:"
+    echo "  Bucket: s3://$BUCKET_NAME"
+    echo "  CloudFront: https://$CLOUDFRONT_DOMAIN"
+    echo "  S3 Direct: http://$BUCKET_NAME.s3-website-$AWS_REGION.amazonaws.com"
+    echo ""
+    echo "🧪 Test the deployment:"
+    echo "  curl https://$CLOUDFRONT_DOMAIN"
+    echo "  curl http://$BUCKET_NAME.s3-website-$AWS_REGION.amazonaws.com"
+    echo ""
+    echo "💡 For full CloudFront setup, run without --quick flag"
+    
+    exit 0
 fi
 
 # Build frontend
@@ -64,10 +209,13 @@ REACT_APP_S3_BUCKET=$S3_BUCKET_NAME_PROD
 REACT_APP_API_BASE_URL=$REACT_APP_API_BASE_URL_AWS
 REACT_APP_S3_REGION=$AWS_REGION
 REACT_APP_ENVIRONMENT=$ENVIRONMENT
+REACT_APP_S3_BUCKET_URL=https://7h-stock-analyzer.s3.$AWS_REGION.amazonaws.com
+REACT_APP_CLOUDFRONT_URL=https://$CLOUDFRONT_DOMAIN
 EOF
 
-# Build for production
+# Build for production with explicit environment variable
 echo "🏗️  Building production bundle..."
+export REACT_APP_API_BASE_URL=$REACT_APP_API_BASE_URL_AWS
 npm run build
 
 if [ ! -d "dist" ]; then
@@ -82,6 +230,10 @@ aws s3 sync dist/ "s3://$BUCKET_NAME/" \
 
 # Create CloudFront distribution if it doesn't exist
 echo "🌐 Setting up CloudFront distribution..."
+
+# Cleanup old distributions first
+cleanup_old_cloudfront_distributions
+
 DISTRIBUTION_ID=$(aws cloudfront list-distributions \
     --query "DistributionList.Items[?Comment=='$BUCKET_NAME frontend'].Id" \
     --output text)

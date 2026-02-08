@@ -45,11 +45,41 @@ Resources:
           ENVIRONMENT: !Ref Environment
       Role: !GetAtt StockAnalyzerExecutionRole.Arn
       Events:
-        Api:
+        ApiHealth:
           Type: HttpApi
           Properties:
-            Path: /{proxy+}
-            Method: ANY
+            Path: /health
+            Method: GET
+        ApiRunNow:
+          Type: HttpApi
+          Properties:
+            Path: /run-now
+            Method: POST
+        ApiReconRun:
+          Type: HttpApi
+          Properties:
+            Path: /recon/run
+            Method: POST
+        ApiConfigUpdate:
+          Type: HttpApi
+          Properties:
+            Path: /config/update
+            Method: POST
+        ApiConfigValidate:
+          Type: HttpApi
+          Properties:
+            Path: /config/validate
+            Method: POST
+        ApiAnalysis:
+          Type: HttpApi
+          Properties:
+            Path: /analysis/{symbol}
+            Method: POST
+        ApiRecommendationsFallback:
+          Type: HttpApi
+          Properties:
+            Path: /recommendations
+            Method: GET
 
   StockAnalyzerExecutionRole:
     Type: AWS::IAM::Role
@@ -92,8 +122,7 @@ Resources:
 
   StockDataBucket:
     Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Sub "7h-stock-analyzer-${Environment}"
+    DeletionPolicy: Retain
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
@@ -118,6 +147,18 @@ Resources:
           - Id: DeleteTempFiles
             Status: Enabled
             ExpirationInDays: 7
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - "Content-Type"
+              - "Authorization"
+              - "X-API-Key"
+            AllowedMethods:
+              - GET
+            AllowedOrigins:
+              - "http://7h-stock-analyzer.s3-website-us-east-1.amazonaws.com"
+              - "https://7h-stock-analyzer.s3-website-us-east-1.amazonaws.com"
+            MaxAgeSeconds: 3600
 
   StockDataBucketPolicy:
     Type: AWS::S3::BucketPolicy
@@ -133,6 +174,14 @@ Resources:
             Action:
               - "s3:GetObject"
             Resource: !Sub "arn:aws:s3:::${StockDataBucket}/*"
+          - Sid: "AllowPublicReadAccessToDataFiles"
+            Effect: "Allow"
+            Principal: "*"
+            Action: "s3:GetObject"
+            Resource: 
+              - !Sub "arn:aws:s3:::${StockDataBucket}/data/*"
+              - !Sub "arn:aws:s3:::${StockDataBucket}/recon/*"
+              - !Sub "arn:aws:s3:::${StockDataBucket}/config/*"
           - Sid: "AllowHTTPSOnly"
             Effect: "Deny"
             Principal: "*"
@@ -147,7 +196,7 @@ Resources:
   StockAnalyzerApi:
     Type: AWS::Serverless::HttpApi
     Properties:
-      Description: API Gateway with security and cost controls
+      Description: API Gateway with security and cost controls - Write operations only
       CorsConfiguration:
         AllowMethods:
           - GET
@@ -158,10 +207,68 @@ Resources:
           - "Authorization"
           - "X-API-Key"
         AllowOrigins:
-          - "https://d224ztwcw6zi6e.cloudfront.net"
+          - "https://d37m5zz5fkglhg.cloudfront.net"
+          - "http://7h-stock-analyzer.s3-website-us-east-1.amazonaws.com"
+          - "https://7h-stock-analyzer.s3-website-us-east-1.amazonaws.com"
           - "http://localhost:3000"
           - "http://localhost:8080"
         MaxAge: 3600
+      RouteSettings:
+        "POST /run-now":
+          ThrottlingBurstLimit: 5
+          ThrottlingRateLimit: 10
+        "POST /recon/run":
+          ThrottlingBurstLimit: 2
+          ThrottlingRateLimit: 5
+        "POST /config/update":
+          ThrottlingBurstLimit: 5
+          ThrottlingRateLimit: 10
+        "POST /config/validate":
+          ThrottlingBurstLimit: 10
+          ThrottlingRateLimit: 15
+        "POST /analysis/{symbol}":
+          ThrottlingBurstLimit: 10
+          ThrottlingRateLimit: 20
+        "GET /recommendations":
+          ThrottlingBurstLimit: 15
+          ThrottlingRateLimit: 30
+        "GET /health":
+          ThrottlingBurstLimit: 20
+          ThrottlingRateLimit: 50
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 20
+        ThrottlingRateLimit: 100
+
+  StockAnalyzerCloudFront:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        CallerReference: !Sub "${AWS::StackName}-frontend-${AWS::AccountId}"
+        Comment: !Sub "${AWS::StackName} frontend"
+        DefaultRootObject: index.html
+        Origins:
+          - Id: S3Origin
+            DomainName: !Sub "${StockDataBucket}.s3-website-${AWS::Region}.amazonaws.com"
+            CustomOriginConfig:
+              HTTPPort: 80
+              HTTPSPort: 443
+              OriginProtocolPolicy: http-only
+              OriginSslProtocols:
+                - TLSv1.2
+              OriginReadTimeout: 30
+              OriginKeepaliveTimeout: 5
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          ForwardedValues:
+            QueryString: false
+            Cookies:
+              Forward: none
+          MinTTL: 0
+          DefaultTTL: 86400
+          MaxTTL: 31536000
+        Enabled: true
+        PriceClass: PriceClass_100
 
   StockAnalyzerLogGroup:
     Type: AWS::Logs::LogGroup
@@ -187,3 +294,9 @@ Outputs:
     Value: !Ref StockDataBucket
     Export:
       Name: !Sub "${AWS::StackName}-StockDataBucket"
+
+  StockAnalyzerCloudFront:
+    Description: "CloudFront distribution URL"
+    Value: !Sub "https://${StockAnalyzerCloudFront.DomainName}"
+    Export:
+      Name: !Sub "${AWS::StackName}-StockAnalyzerCloudFront"

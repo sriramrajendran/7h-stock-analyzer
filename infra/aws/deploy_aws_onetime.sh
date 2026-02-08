@@ -1,7 +1,37 @@
 #!/bin/bash
 set -e
 
+# Parse command line arguments
+QUICK_MODE=false
+LAMBDA_ONLY=false
+FRONTEND_ONLY=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --quick)
+            QUICK_MODE=true
+            shift
+            ;;
+        --lambda-only)
+            LAMBDA_ONLY=true
+            shift
+            ;;
+        --frontend-only)
+            FRONTEND_ONLY=true
+            shift
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Usage: $0 [--quick] [--lambda-only] [--frontend-only]"
+            exit 1
+            ;;
+    esac
+done
+
 echo "🚀 Deploying 7H Stock Analyzer to AWS (Cost-Optimized)..."
+if [ "$QUICK_MODE" = true ]; then
+    echo "⚡ Quick mode enabled - Lambda-only update"
+fi
 
 # Load environment variables
 if [ ! -f ../../.env.local ]; then
@@ -29,6 +59,94 @@ echo "  Environment: ${ENVIRONMENT:-dev}"
 # Set environment-specific variables
 ENVIRONMENT=${ENVIRONMENT:-dev}
 STACK_NAME="7h-stock-analyzer-${ENVIRONMENT}"
+
+# Quick mode: Skip infrastructure setup and directly update Lambda
+if [ "$QUICK_MODE" = true ]; then
+    echo "⚡ Quick Lambda Update Mode"
+    echo "  Skipping infrastructure setup..."
+    echo "  Updating Lambda function code directly..."
+    
+    # Get existing Lambda function name from stack
+    LAMBDA_FUNCTION_NAME=$(aws lambda list-functions \
+        --query "Functions[?contains(FunctionName, 'StockAnalyzerFunction')].FunctionName" \
+        --output text \
+        --region $AWS_REGION)
+    
+    if [ -z "$LAMBDA_FUNCTION_NAME" ] || [ "$LAMBDA_FUNCTION_NAME" = "None" ]; then
+        echo "❌ Lambda function not found. Please run full deployment first."
+        exit 1
+    fi
+    
+    echo "🔧 Found Lambda function: $LAMBDA_FUNCTION_NAME"
+    
+    # Build application package (quick version)
+    echo "📦 Building application package..."
+    rm -rf ../build/package
+    mkdir -p ../build/package
+    
+    # Copy only necessary files
+    cp -r /Users/sriramrajendran/7_projects/7h-stock-analyzer/backend/app ../build/package/
+    cp /Users/sriramrajendran/7_projects/7h-stock-analyzer/backend/requirements.txt ../build/package/
+    
+    # Create zip
+    cd ../build/package
+    zip -r ../../stock-analyzer-lambda-quick.zip . -x "*.pyc" "*.pyo" "__pycache__/*"
+    cd ../..
+    
+    PACKAGE_SIZE=$(du -h stock-analyzer-lambda-quick.zip | cut -f1)
+    echo "✅ Application package created: $PACKAGE_SIZE"
+    
+    # Update Lambda function code directly
+    echo "🔄 Updating Lambda function code..."
+    aws lambda update-function-code \
+        --function-name "$LAMBDA_FUNCTION_NAME" \
+        --zip-file fileb://stock-analyzer-lambda-quick.zip \
+        --region $AWS_REGION
+    
+    # Wait for update to complete
+    echo "⏳ Waiting for Lambda update to complete..."
+    aws lambda wait function-updated \
+        --function-name "$LAMBDA_FUNCTION_NAME" \
+        --region $AWS_REGION
+    
+    # Test the updated function
+    echo "🧪 Testing updated Lambda function..."
+    API_URL=$(aws cloudformation describe-stacks \
+        --stack-name $STACK_NAME \
+        --region $AWS_REGION \
+        --query 'Stacks[0].Outputs[?OutputKey==`StockAnalyzerApi`].OutputValue' \
+        --output text)
+    
+    if [ -n "$API_URL" ] && [ "$API_URL" != "None" ]; then
+        echo "🌐 Testing API endpoint: $API_URL/health"
+        HEALTH_RESPONSE=$(curl -s -w "%{http_code}" "$API_URL/health" || echo "000")
+        
+        if [[ "$HEALTH_RESPONSE" == *"200"* ]]; then
+            echo "✅ Lambda function updated and tested successfully"
+        else
+            echo "⚠️  Lambda updated but health check failed: $HEALTH_RESPONSE"
+        fi
+    else
+        echo "⚠️  Could not get API URL for testing"
+    fi
+    
+    # Clean up
+    rm -f stock-analyzer-lambda-quick.zip
+    rm -rf ../build/package
+    
+    echo ""
+    echo "🎉 Quick Lambda deployment completed!"
+    echo "⚡ Deployment time: ~30-60 seconds (vs 15+ minutes for full deployment)"
+    echo ""
+    echo "📋 Quick deployment info:"
+    echo "  Function: $LAMBDA_FUNCTION_NAME"
+    echo "  API URL: $API_URL"
+    echo "  Package size: $PACKAGE_SIZE"
+    echo ""
+    echo "💡 For full infrastructure changes, run without --quick flag"
+    
+    exit 0
+fi
 
 # Cost optimization settings
 MEMORY_SIZE=${MEMORY_SIZE:-512}  # Reduced from 1024MB
