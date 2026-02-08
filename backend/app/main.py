@@ -11,36 +11,8 @@ import json
 from datetime import datetime
 from dataclasses import dataclass
 
-# Try to import heavy dependencies, but provide fallbacks
-try:
-    from app.engine.modular_recommender import run_modular_analysis, run_single_analysis
-    HEAVY_DEPENDENCIES_AVAILABLE = True
-except ImportError as e:
-    print(f"Warning: Heavy dependencies not available: {e}")
-    HEAVY_DEPENDENCIES_AVAILABLE = False
-    
-    # Fallback implementations when heavy dependencies aren't available
-    def run_modular_analysis():
-        """Fallback analysis when numpy/pandas aren't available"""
-        return {
-            "success": False,
-            "error": "Heavy dependencies (numpy/pandas) not available",
-            "message": "Lambda layer needs to be updated with proper dependencies",
-            "recommendations": [],
-            "timestamp": datetime.utcnow().isoformat(),
-            "fallback": True
-        }
-    
-    def run_single_analysis(symbol):
-        """Fallback single analysis when numpy/pandas aren't available"""
-        return {
-            "success": False,
-            "error": "Heavy dependencies (numpy/pandas) not available",
-            "message": "Lambda layer needs to be updated with proper dependencies",
-            "symbol": symbol,
-            "timestamp": datetime.utcnow().isoformat(),
-            "fallback": True
-        }
+# Import analysis engine
+from app.engine.modular_recommender import run_modular_analysis, run_single_analysis
 
 from app.services.s3_store import persist_results
 from app.services.pushover import send_push_notification

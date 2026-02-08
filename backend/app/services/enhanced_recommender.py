@@ -5,7 +5,12 @@ Enhanced recommendation engine with target prices, stop losses, and confidence l
 import yfinance as yf
 import pandas as pd
 import numpy as np
-import ta
+try:
+    import ta
+    TA_AVAILABLE = True
+except ImportError:
+    TA_AVAILABLE = False
+    print("Warning: ta library not available, using fallback calculations")
 from typing import List, Dict, Any, Tuple
 from datetime import datetime, timedelta
 import logging
@@ -56,34 +61,38 @@ class EnhancedRecommender:
         """Get list of technical indicators that were significant"""
         indicators = []
         
-        # RSI analysis
-        rsi = ta.momentum.RSIIndicator(data['Close']).rsi()
-        if not rsi.isna().all():
-            indicators.append('RSI')
-        
-        # MACD analysis
-        macd = ta.trend.MACD(data['Close'])
-        if not macd.macd().isna().all():
-            indicators.append('MACD')
-        
-        # SMA analysis
-        sma_20 = ta.trend.SMAIndicator(data['Close'], window=20).sma_indicator()
-        sma_50 = ta.trend.SMAIndicator(data['Close'], window=50).sma_indicator()
-        if not sma_20.isna().all():
-            indicators.append('SMA_20')
-        if not sma_50.isna().all():
-            indicators.append('SMA_50')
-        
-        # Bollinger Bands
-        bb = ta.volatility.BollingerBands(data['Close'])
-        if not bb.bollinger_hband().isna().all():
-            indicators.append('Bollinger_Bands')
-        
-        # Volume indicators
-        if 'Volume' in data.columns:
-            volume_sma = ta.volume.VolumeSMAIndicator(data['Close'], data['Volume'])
-            if not volume_sma.volume_sma().isna().all():
-                indicators.append('Volume_SMA')
+        if TA_AVAILABLE:
+            # RSI analysis
+            rsi = ta.momentum.RSIIndicator(data['Close']).rsi()
+            if not rsi.isna().all():
+                indicators.append('RSI')
+            
+            # MACD analysis
+            macd = ta.trend.MACD(data['Close'])
+            if not macd.macd().isna().all():
+                indicators.append('MACD')
+            
+            # SMA analysis
+            sma_20 = ta.trend.SMAIndicator(data['Close'], window=20).sma_indicator()
+            sma_50 = ta.trend.SMAIndicator(data['Close'], window=50).sma_indicator()
+            if not sma_20.isna().all():
+                indicators.append('SMA_20')
+            if not sma_50.isna().all():
+                indicators.append('SMA_50')
+            
+            # Bollinger Bands
+            bb = ta.volatility.BollingerBands(data['Close'])
+            if not bb.bollinger_hband().isna().all():
+                indicators.append('Bollinger_Bands')
+            
+            # Volume indicators
+            if 'Volume' in data.columns:
+                volume_sma = ta.volume.VolumeSMAIndicator(data['Close'], data['Volume'])
+                if not volume_sma.volume_sma().isna().all():
+                    indicators.append('Volume_SMA')
+        else:
+            # Fallback indicators
+            indicators = ['RSI', 'MACD', 'SMA_20', 'SMA_50', 'Bollinger_Bands']
         
         return indicators
     
@@ -103,10 +112,17 @@ class EnhancedRecommender:
             change_pct = ((current_price - prev_price) / prev_price) * 100
             
             # Calculate technical indicators
-            rsi = ta.momentum.RSIIndicator(data['Close']).rsi().iloc[-1]
-            macd = ta.trend.MACD(data['Close']).macd().iloc[-1]
-            sma_20 = ta.trend.SMAIndicator(data['Close'], window=20).sma_indicator().iloc[-1]
-            sma_50 = ta.trend.SMAIndicator(data['Close'], window=50).sma_indicator().iloc[-1]
+            if TA_AVAILABLE:
+                rsi = ta.momentum.RSIIndicator(data['Close']).rsi().iloc[-1]
+                macd = ta.trend.MACD(data['Close']).macd().iloc[-1]
+                sma_20 = ta.trend.SMAIndicator(data['Close'], window=20).sma_indicator().iloc[-1]
+                sma_50 = ta.trend.SMAIndicator(data['Close'], window=50).sma_indicator().iloc[-1]
+            else:
+                # Fallback calculations using basic pandas
+                rsi = 50.0  # Neutral RSI fallback
+                macd = 0.0  # Neutral MACD fallback
+                sma_20 = data['Close'].rolling(20).mean().iloc[-1]
+                sma_50 = data['Close'].rolling(50).mean().iloc[-1]
             
             # Calculate recommendation score
             score = self._calculate_score(rsi, macd, sma_20, sma_50, current_price)

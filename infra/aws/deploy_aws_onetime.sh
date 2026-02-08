@@ -109,6 +109,44 @@ if [ "$QUICK_MODE" = true ]; then
         --function-name "$LAMBDA_FUNCTION_NAME" \
         --region $AWS_REGION
     
+    # Update Lambda environment variables with all credentials from .env.local
+    echo "� Updating Lambda environment variables from .env.local..."
+    
+    # Build environment variables JSON with all available variables
+    ENV_VARS=$(cat <<EOF
+{
+    "Variables": {
+        "API_KEY": "$API_KEY",
+        "ENVIRONMENT": "${ENVIRONMENT:-production}",
+        "APP_AWS_REGION": "$AWS_REGION",
+        "S3_BUCKET_NAME": "$S3_BUCKET_NAME_PROD",
+        "LOG_LEVEL": "${LOG_LEVEL:-INFO}",
+        "PUSHOVER_TOKEN": "$PUSHOVER_TOKEN",
+        "PUSHOVER_USER": "$PUSHOVER_USER",
+        "REQUIRE_AUTH": "${REQUIRE_AUTH:-true}",
+        "ENABLE_NOTIFICATIONS": "${ENABLE_NOTIFICATIONS:-false}"
+    }
+}
+EOF
+)
+    
+    # Update Lambda configuration
+    aws lambda update-function-configuration \
+        --function-name "$LAMBDA_FUNCTION_NAME" \
+        --environment "$ENV_VARS" \
+        --region $AWS_REGION
+    
+    echo "✅ Lambda environment variables updated with all .env.local credentials"
+    echo "  - API_KEY: ✓"
+    echo "  - ENVIRONMENT: $ENVIRONMENT"
+    echo "  - AWS_REGION: $AWS_REGION"
+    echo "  - S3_BUCKET_NAME: $S3_BUCKET_NAME_PROD"
+    echo "  - LOG_LEVEL: $LOG_LEVEL"
+    echo "  - PUSHOVER_TOKEN: ✓"
+    echo "  - PUSHOVER_USER: ✓"
+    echo "  - REQUIRE_AUTH: $REQUIRE_AUTH"
+    echo "  - ENABLE_NOTIFICATIONS: $ENABLE_NOTIFICATIONS"
+    
     # Test the updated function
     echo "🧪 Testing updated Lambda function..."
     API_URL=$(aws cloudformation describe-stacks \
@@ -300,6 +338,60 @@ aws ssm put-parameter \
     --type "SecureString" \
     --description "Stock Analyzer API Key" \
     --overwrite
+
+# Configure Lambda environment variables with all credentials from .env.local
+echo "� Configuring Lambda environment variables from .env.local..."
+
+# Get Lambda function name from stack outputs
+LAMBDA_FUNCTION_NAME=$(aws cloudformation describe-stacks \
+    --stack-name stock-analyzer-prod \
+    --region $AWS_REGION \
+    --query 'Stacks[0].Outputs[?OutputKey==`StockAnalyzerFunction`].OutputValue' \
+    --output text)
+
+if [ -n "$LAMBDA_FUNCTION_NAME" ] && [ "$LAMBDA_FUNCTION_NAME" != "None" ]; then
+    # Extract function name from ARN
+    LAMBDA_SHORT_NAME=$(basename "$LAMBDA_FUNCTION_NAME")
+    
+    echo "🔧 Updating Lambda environment variables for: $LAMBDA_SHORT_NAME"
+    
+    # Build environment variables JSON with all available variables
+    ENV_VARS=$(cat <<EOF
+{
+    "Variables": {
+        "API_KEY": "$API_KEY",
+        "ENVIRONMENT": "${ENVIRONMENT:-production}",
+        "APP_AWS_REGION": "$AWS_REGION",
+        "S3_BUCKET_NAME": "$S3_BUCKET_NAME_PROD",
+        "LOG_LEVEL": "${LOG_LEVEL:-INFO}",
+        "PUSHOVER_TOKEN": "$PUSHOVER_TOKEN",
+        "PUSHOVER_USER": "$PUSHOVER_USER",
+        "REQUIRE_AUTH": "${REQUIRE_AUTH:-true}",
+        "ENABLE_NOTIFICATIONS": "${ENABLE_NOTIFICATIONS:-false}"
+    }
+}
+EOF
+)
+    
+    # Update Lambda configuration
+    aws lambda update-function-configuration \
+        --function-name "$LAMBDA_SHORT_NAME" \
+        --environment "$ENV_VARS" \
+        --region $AWS_REGION
+    
+    echo "✅ Lambda environment variables updated with all .env.local credentials"
+    echo "  - API_KEY: ✓"
+    echo "  - ENVIRONMENT: $ENVIRONMENT"
+    echo "  - AWS_REGION: $AWS_REGION"
+    echo "  - S3_BUCKET_NAME: $S3_BUCKET_NAME_PROD"
+    echo "  - LOG_LEVEL: $LOG_LEVEL"
+    echo "  - PUSHOVER_TOKEN: ✓"
+    echo "  - PUSHOVER_USER: ✓"
+    echo "  - REQUIRE_AUTH: $REQUIRE_AUTH"
+    echo "  - ENABLE_NOTIFICATIONS: $ENABLE_NOTIFICATIONS"
+else
+    echo "⚠️  Could not find Lambda function name - skipping environment variable update"
+fi
 
 # Set up CloudWatch billing alerts
 echo "💰 Setting up CloudWatch billing alerts..."

@@ -72,7 +72,7 @@ def build_enhanced_notification_message(recommendations: List[Recommendation]) -
     Build enhanced notification message content with target prices and confidence levels
     
     Args:
-        recommendations: List of enhanced stock recommendations
+        recommendations: List of enhanced stock recommendations (can be objects or dicts)
         
     Returns:
         Dict with title, text, priority, and sound
@@ -87,8 +87,17 @@ def build_enhanced_notification_message(recommendations: List[Recommendation]) -
             'sound': 'none'
         }
     
-    # Filter for significant recommendations (Buy/Strong Buy)
-    significant_recs = [r for r in recommendations if r.recommendation in ['Strong Buy', 'Buy']]
+    # Handle both Recommendation objects and dictionaries
+    significant_recs = []
+    for r in recommendations:
+        if hasattr(r, 'recommendation'):
+            # It's a Recommendation object
+            if r.recommendation in ['Strong Buy', 'Buy']:
+                significant_recs.append(r)
+        elif isinstance(r, dict):
+            # It's a dictionary
+            if r.get('recommendation') in ['Strong Buy', 'Buy']:
+                significant_recs.append(r)
     
     if not significant_recs:
         return {
@@ -104,11 +113,20 @@ def build_enhanced_notification_message(recommendations: List[Recommendation]) -
     # Format top recommendations with enhanced data
     top_stocks = []
     for rec in top_3:
-        symbol = rec.symbol
-        price = rec.price
-        change = rec.change_pct
-        confidence = rec.confidence_level or 'Medium'
-        target_price = rec.target_price
+        if hasattr(rec, 'symbol'):
+            # Recommendation object
+            symbol = rec.symbol
+            price = rec.price
+            change = rec.change_pct
+            confidence = getattr(rec, 'confidence_level', 'Medium')
+            target_price = getattr(rec, 'target_price', None)
+        else:
+            # Dictionary
+            symbol = rec.get('symbol', 'N/A')
+            price = rec.get('price', 0)
+            change = rec.get('change_pct', 0)
+            confidence = rec.get('confidence_level', 'Medium')
+            target_price = rec.get('target_price')
         
         change_str = f"+{change:.1f}%" if change > 0 else f"{change:.1f}%"
         target_str = f" (Target: ${target_price:.2f})" if target_price else ""
@@ -130,7 +148,11 @@ def build_enhanced_notification_message(recommendations: List[Recommendation]) -
     sound = 'pushover'
     
     # High confidence recommendations
-    high_confidence_count = sum(1 for r in significant_recs if r.confidence_level == 'High')
+    high_confidence_count = 0
+    for rec in significant_recs:
+        conf = getattr(rec, 'confidence_level', 'Medium') if hasattr(rec, 'confidence_level') else rec.get('confidence_level', 'Medium')
+        if conf == 'High':
+            high_confidence_count += 1
     
     if count >= 5 or high_confidence_count >= 3:
         priority = 1  # High priority
@@ -143,9 +165,14 @@ def build_enhanced_notification_message(recommendations: List[Recommendation]) -
         sound = 'none'
     
     # Check for exceptional scores
-    if significant_recs and significant_recs[0].score >= 0.8:
-        priority = 1
-        sound = 'spacealarm'
+    if significant_recs and hasattr(significant_recs[0], 'score'):
+        if significant_recs[0].score >= 0.8:
+            priority = 1
+            sound = 'spacealarm'
+    elif significant_recs and isinstance(significant_recs[0], dict):
+        if significant_recs[0].get('score', 0) >= 0.8:
+            priority = 1
+            sound = 'spacealarm'
     
     return {
         'title': f'Stock Analysis: {count} BUY Recommendations',

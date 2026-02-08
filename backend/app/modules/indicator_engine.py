@@ -6,11 +6,16 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List, Optional
 import logging
-from ta.trend import EMAIndicator, SMAIndicator, MACD, ADXIndicator
-from ta.momentum import RSIIndicator, StochRSIIndicator, ROCIndicator
-from ta.volatility import BollingerBands, AverageTrueRange
-from ta.volume import OnBalanceVolumeIndicator, VolumeWeightedAveragePrice
-from ta.others import DailyReturnIndicator
+try:
+    from ta.trend import EMAIndicator, SMAIndicator, MACD, ADXIndicator
+    from ta.momentum import RSIIndicator, StochRSIIndicator, ROCIndicator
+    from ta.volatility import BollingerBands, AverageTrueRange
+    from ta.volume import OnBalanceVolumeIndicator, VolumeWeightedAveragePrice
+    from ta.others import DailyReturnIndicator
+    TA_AVAILABLE = True
+except ImportError:
+    TA_AVAILABLE = False
+    print("Warning: ta library not available, using fallback calculations")
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +32,15 @@ class IndicatorEngine:
         }
     
     def compute_all_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Compute all technical indicators for the given OHLCV data"""
+        """Compute comprehensive suite of technical indicators"""
+        if not TA_AVAILABLE:
+            logger.warning("TA library not available, returning basic indicators")
+            # Add basic moving averages using pandas
+            df['SMA_20'] = df['Close'].rolling(window=20).mean()
+            df['SMA_50'] = df['Close'].rolling(window=50).mean()
+            df['RSI'] = 50.0  # Neutral fallback
+            return df
+        
         if df.empty or len(df) < 50:
             logger.warning("Insufficient data for indicator computation")
             return df

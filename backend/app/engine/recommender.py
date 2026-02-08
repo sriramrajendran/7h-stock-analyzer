@@ -5,10 +5,15 @@ Stock Recommendation Engine - Migrated from BatchStockAnalyzer
 import yfinance as yf
 import pandas as pd
 import numpy as np
-from ta.trend import MACD, EMAIndicator, SMAIndicator
-from ta.momentum import RSIIndicator, StochasticOscillator
-from ta.volatility import BollingerBands, AverageTrueRange
-from ta.volume import OnBalanceVolumeIndicator
+try:
+    from ta.trend import MACD, EMAIndicator, SMAIndicator
+    from ta.momentum import RSIIndicator, StochasticOscillator
+    from ta.volatility import BollingerBands, AverageTrueRange
+    from ta.volume import OnBalanceVolumeIndicator
+    TA_AVAILABLE = True
+except ImportError:
+    TA_AVAILABLE = False
+    print("Warning: ta library not available, using fallback calculations")
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 import time
