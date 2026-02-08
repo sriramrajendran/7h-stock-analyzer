@@ -45,6 +45,29 @@ Resources:
           ENVIRONMENT: !Ref Environment
       Role: !GetAtt StockAnalyzerExecutionRole.Arn
       Events:
+        # EventBridge Scheduled Events - NEW: Non-disruptive addition
+        MarketOpenAlert:
+          Type: Schedule
+          Properties:
+            Schedule: cron(0 14 ? * MON-FRI *)
+            Name: !Sub "${AWS::StackName}-market-open-alert"
+            Description: "Daily market open alert at 9:00 AM EST (2:00 PM UTC)"
+            Enabled: true
+        MiddayAlert:
+          Type: Schedule
+          Properties:
+            Schedule: cron(30 17 ? * MON-FRI *)
+            Name: !Sub "${AWS::StackName}-midday-alert"
+            Description: "Daily midday alert at 12:30 PM EST (5:30 PM UTC)"
+            Enabled: true
+        WeeklyReconciliation:
+          Type: Schedule
+          Properties:
+            Schedule: cron(0 23 ? * SUN *)
+            Name: !Sub "${AWS::StackName}-weekly-reconciliation"
+            Description: "Weekly reconciliation Sunday 6:00 PM EST (11:00 PM UTC)"
+            Enabled: true
+        # Existing API Gateway Events - UNCHANGED
         ApiHealth:
           Type: HttpApi
           Properties:
@@ -123,42 +146,6 @@ Resources:
   StockDataBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Retain
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
-      VersioningConfiguration:
-        Status: Enabled
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: aws:kms
-              KMSMasterKeyID: alias/aws/s3
-            BucketKeyEnabled: true
-      LifecycleConfiguration:
-        Rules:
-          - Id: DeleteOldDailyFiles
-            Status: Enabled
-            ExpirationInDays: 365
-          - Id: DeleteOldLogs
-            Status: Enabled
-            ExpirationInDays: 30
-          - Id: DeleteTempFiles
-            Status: Enabled
-            ExpirationInDays: 7
-      CorsConfiguration:
-        CorsRules:
-          - AllowedHeaders:
-              - "Content-Type"
-              - "Authorization"
-              - "X-API-Key"
-            AllowedMethods:
-              - GET
-            AllowedOrigins:
-              - "http://7h-stock-analyzer.s3-website-us-east-1.amazonaws.com"
-              - "https://7h-stock-analyzer.s3-website-us-east-1.amazonaws.com"
-            MaxAgeSeconds: 3600
 
   StockDataBucketPolicy:
     Type: AWS::S3::BucketPolicy
@@ -215,29 +202,38 @@ Resources:
         MaxAge: 3600
       RouteSettings:
         "POST /run-now":
-          ThrottlingBurstLimit: 5
-          ThrottlingRateLimit: 10
+          ThrottlingBurstLimit: 3
+          ThrottlingRateLimit: 1
         "POST /recon/run":
-          ThrottlingBurstLimit: 2
-          ThrottlingRateLimit: 5
+          ThrottlingBurstLimit: 3
+          ThrottlingRateLimit: 1
         "POST /config/update":
-          ThrottlingBurstLimit: 5
-          ThrottlingRateLimit: 10
+          ThrottlingBurstLimit: 3
+          ThrottlingRateLimit: 1
         "POST /config/validate":
-          ThrottlingBurstLimit: 10
-          ThrottlingRateLimit: 15
+          ThrottlingBurstLimit: 3
+          ThrottlingRateLimit: 1
         "POST /analysis/{symbol}":
-          ThrottlingBurstLimit: 10
-          ThrottlingRateLimit: 20
+          ThrottlingBurstLimit: 3
+          ThrottlingRateLimit: 1
         "GET /recommendations":
-          ThrottlingBurstLimit: 15
-          ThrottlingRateLimit: 30
+          ThrottlingBurstLimit: 3
+          ThrottlingRateLimit: 1
         "GET /health":
-          ThrottlingBurstLimit: 20
-          ThrottlingRateLimit: 50
+          ThrottlingBurstLimit: 3
+          ThrottlingRateLimit: 1
+        "GET /analysis/{ticker}":
+          ThrottlingBurstLimit: 3
+          ThrottlingRateLimit: 1
+        "GET /analysis/{ticker}/signals":
+          ThrottlingBurstLimit: 3
+          ThrottlingRateLimit: 1
+        "GET /analysis/{ticker}/indicators":
+          ThrottlingBurstLimit: 3
+          ThrottlingRateLimit: 1
       DefaultRouteSettings:
-        ThrottlingBurstLimit: 20
-        ThrottlingRateLimit: 100
+        ThrottlingBurstLimit: 3
+        ThrottlingRateLimit: 1
 
   StockAnalyzerCloudFront:
     Type: AWS::CloudFront::Distribution

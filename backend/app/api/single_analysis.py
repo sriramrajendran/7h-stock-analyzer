@@ -100,7 +100,7 @@ def get_ticker_signals(ticker: str, period: str = Query(default="1y"), auth: boo
         raise HTTPException(status_code=500, detail=f"Signal analysis failed: {str(e)}")
 
 @router.get("/{ticker}/indicators")
-def get_ticker_indicators(ticker: str, period: str = Query(default="1y")):
+def get_ticker_indicators(ticker: str, period: str = Query(default="1y"), auth: bool = Depends(verify_api_key)):
     """Get technical indicators for a ticker"""
     try:
         ticker = ticker.upper().strip()

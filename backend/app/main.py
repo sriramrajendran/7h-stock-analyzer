@@ -105,7 +105,7 @@ app.add_middleware(StructuredErrorLoggingMiddleware)
 
 
 @app.get("/health")
-def health_check():
+def health_check(auth: bool = Depends(verify_api_key)):
     """Health check endpoint - optimized for minimal cost"""
     # In production, skip timestamp generation to reduce computation
     if os.getenv('ENVIRONMENT') == 'prod':
@@ -127,18 +127,6 @@ def health_check():
 def run_now(auth: bool = Depends(verify_api_key)):
     """Manual trigger for stock analysis using modular engine"""
     try:
-        # Check if heavy dependencies are available
-        if not HEAVY_DEPENDENCIES_AVAILABLE:
-            # Return a meaningful mock response for now
-            return {
-                "status": "success",
-                "message": "Analysis completed successfully - running in fallback mode until full analysis engine is activated",
-                "recommendations": 0,
-                "timestamp": datetime.utcnow().isoformat(),
-                "fallback": True,
-                "note": "Lambda dependencies are fixed, this is a controlled fallback response"
-            }
-        
         # Run the modular recommendation engine
         recommendations = run_modular_analysis()
         
