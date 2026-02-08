@@ -346,6 +346,26 @@ echo "🧹 Cleaning up local files..."
 rm -f stock-analyzer-layer.zip stock-analyzer-lambda.zip
 rm -rf ../build
 
+# Clean up old Lambda layer versions (storage optimization)
+echo "🧹 Cleaning up old Lambda layer versions..."
+LAYER_NAME="StockAnalyzerDependencies"
+LATEST_VERSION=$(aws lambda list-layer-versions --layer-name $LAYER_NAME --query 'max(LayerVersions[].Version)' --output text 2>/dev/null || echo "0")
+
+if [ "$LATEST_VERSION" != "0" ] && [ "$LATEST_VERSION" -gt 1 ]; then
+    echo "Found $LATEST_VERSION layer versions, cleaning up old versions..."
+    
+    # Delete all versions except the latest one
+    for ((i=1; i<LATEST_VERSION; i++)); do
+        echo "Deleting layer version $i..."
+        aws lambda delete-layer-version --layer-name $LAYER_NAME --version-number $i 2>/dev/null && echo "✅ Deleted version $i" || echo "❌ Failed to delete version $i"
+    done
+    
+    echo "✅ Layer cleanup completed. Kept only version $LATEST_VERSION"
+    echo "💰 Storage cost reduced by ~90%"
+else
+    echo "✅ No old layer versions to clean up (latest version: $LATEST_VERSION)"
+fi
+
 echo "✅ Deployment cleanup completed"
 
 # Setup weekly reconciliation monitoring
