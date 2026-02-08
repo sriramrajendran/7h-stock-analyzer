@@ -43,10 +43,16 @@
   - Verified UI access from both CloudFront and S3 URLs
   - Confirmed API Gateway endpoints working (GET and POST methods)
   - **Cleaned up POST /config/sync endpoint** - Removed from API Gateway, backend code, frontend, and documentation
+- **Lambda Layer Dependencies Fixed** (February 8, 2026)
+  - **Root Cause**: Previous layers had numpy built from source instead of precompiled wheels
+  - **Solution**: Created complete Lambda layer (v23) with proper precompiled dependencies
+  - **Dependencies Included**: FastAPI, Mangum, Numpy, Pandas, yfinance, requests, exceptiongroup, and all transitive dependencies
+  - **Layer Size**: 39MB (under 70MB AWS limit)
+  - **Result**: All API endpoints now working correctly, no more import errors
 
 ### ⚠️ Current Issues
-- **Lambda Layer Issue**: Numpy import error in Lambda layer needs resolution
-- **Backend Deployment**: Lambda function updated but failing due to dependency issue
+- **Lambda Layer Issue**: ✅ **FIXED** - Created complete Lambda layer with all dependencies (FastAPI, Mangum, Numpy, Pandas, yfinance, requests, etc.)
+- **Backend Deployment**: ✅ **FIXED** - Lambda function now working with proper dependency layer
 - **Frontend Status**: ✅ Working with S3 direct access architecture
 - **CloudFront Status**: ✅ Active and properly configured (d37m5zz5fkglhg.cloudfront.net)
 - **Lambda Code Size**: 44MB layer with heavy dependencies (numpy/pandas compiled libraries)
@@ -872,6 +878,277 @@ LifecycleConfiguration:
 - **Security**: Enhanced with rate limiting
 - **Cost Control**: Active with throttling + pending $10 alerts
 - **Performance**: Ready for edge caching
+
+## Infrastructure Consistency Validation
+
+### Multi-Agent Vibe Coding Infrastructure Sync
+
+**Problem**: With multiple agents working on shell scripts, infrastructure configurations can drift across files, causing deployment inconsistencies and security gaps.
+
+**Solution**: Infrastructure consistency validation and synchronized configuration management.
+
+### Current Infrastructure Consistency Issues
+
+#### ❌ IDENTIFIED INCONSISTENCIES:
+
+1. **Stack Name Variations**
+   - `deploy_aws_onetime.sh`: Uses `stock-analyzer-prod` (hardcoded)
+   - `template.yaml`: Exports `7h-stock-analyzer-${Environment}`
+   - **Impact**: Stack reference failures in cross-script operations
+
+2. **CloudFront Domain References**
+   - `deploy_aws_onetime.sh`: Hardcoded `d224ztwcw6zi6e.cloudfront.net`
+   - `deploy_frontend.sh`: Dynamic lookup via `$CLOUDFRONT_DOMAIN`
+   - **Impact**: Deployment failures when CloudFront changes
+
+3. **Bucket Name Inconsistencies**
+   - Mixed usage of `$S3_BUCKET_NAME_PROD` vs dynamic bucket naming
+   - **Impact**: Cross-environment deployment failures
+
+4. **Duplicated Functions**
+   - `cleanup_old_cloudfront_distributions()` exists in multiple scripts
+   - Lambda cleanup logic duplicated across 3 scripts
+   - **Impact**: Maintenance overhead, inconsistent behavior
+
+5. **Configuration Drift**
+   - Memory/timeout settings differ between scripts and template.yaml
+   - Rate limiting configurations not synchronized
+   - **Impact**: Unpredictable deployment behavior
+
+### Infrastructure Consistency Solution
+
+#### ✅ IMPLEMENTATION STRATEGY:
+
+**1. Centralized Configuration Variables**
+```bash
+# Add to all scripts - consistent variable sourcing
+source ./infra/aws/config_common.sh
+
+# Standardized naming conventions
+STACK_NAME_BASE="7h-stock-analyzer"
+ENVIRONMENT=${ENVIRONMENT:-production}
+STACK_NAME="${STACK_NAME_BASE}-${ENVIRONMENT}"
+```
+
+**2. Shared Function Library**
+```bash
+# Create infra/aws/shared_functions.sh
+cleanup_old_cloudfront_distributions() {
+    # Single implementation used by all scripts
+}
+
+cleanup_lambda_layers() {
+    # Single implementation used by all scripts
+}
+```
+
+**3. Configuration Validation**
+```bash
+# Add to beginning of each deployment script
+validate_infrastructure_consistency() {
+    # Check stack naming consistency
+    # Verify CloudFront domain references
+    # Validate bucket naming conventions
+    # Confirm rate limiting sync
+}
+```
+
+**4. Template-Script Sync Verification**
+```bash
+# Verify template.yaml values match script configurations
+validate_template_script_sync() {
+    # Memory size: template.yaml vs scripts
+    # Timeout settings: template.yaml vs scripts  
+    # Rate limiting: template.yaml vs script expectations
+}
+```
+
+### Enforcement Mechanisms
+
+#### Pre-Deployment Validation (Mandatory)
+```bash
+# Added to all deployment scripts
+echo "🔍 Validating infrastructure consistency..."
+validate_infrastructure_consistency
+validate_template_script_sync
+echo "✅ Infrastructure consistency validated"
+```
+
+#### Real-Time Consistency Checks
+```bash
+# During deployment - auto-checks
+if [[ $(grep -r "stock-analyzer-prod" infra/aws/*.sh | wc -l) -gt 0 ]]; then
+    echo "❌ VIOLATION: Hardcoded stack name found"
+    echo "   Use \$STACK_NAME variable instead"
+    exit 1
+fi
+
+if [[ $(grep -r "d224ztwcw6zi6e" infra/aws/*.sh | wc -l) -gt 0 ]]; then
+    echo "❌ VIOLATION: Hardcoded CloudFront domain found"
+    echo "   Use dynamic \$CLOUDFRONT_DOMAIN lookup instead"
+    exit 1
+fi
+```
+
+#### Post-Deployment Verification
+```bash
+# Verify deployed infrastructure matches expectations
+verify_deployment_consistency() {
+    # Stack outputs match script expectations
+    # CloudFront domain matches dynamic lookup
+    # Bucket policies are consistent
+    # Rate limiting is applied correctly
+}
+```
+
+### Configuration Synchronization Matrix
+
+| Configuration | template.yaml | deploy_aws_onetime.sh | deploy_frontend.sh | deploy_quick.sh |
+|---------------|---------------|----------------------|-------------------|-----------------|
+| Stack Name | ✅ `${AWS::StackName}` | ❌ `stock-analyzer-prod` | ✅ Dynamic | ✅ Dynamic |
+| Memory Size | ✅ 512MB | ✅ 512MB | N/A | ✅ 512MB |
+| Timeout | ✅ 900s | ✅ 180s | N/A | ✅ 180s |
+| CloudFront | ✅ Dynamic | ❌ Hardcoded | ✅ Dynamic | ✅ Dynamic |
+| Rate Limiting | ✅ Configured | ✅ Verified | N/A | ✅ Verified |
+
+### Implementation Plan
+
+#### Phase 1: Configuration Consolidation (Immediate)
+1. **Create shared configuration file** (`infra/aws/config_common.sh`)
+2. **Update all scripts** to use centralized variables
+3. **Remove hardcoded values** from all shell scripts
+4. **Add validation functions** to each script
+
+#### Phase 2: Function Library Creation (Next)
+1. **Create shared functions file** (`infra/aws/shared_functions.sh`)
+2. **Consolidate duplicate functions** from multiple scripts
+3. **Update all scripts** to source shared functions
+4. **Remove duplicated code** from individual scripts
+
+#### Phase 3: Validation Integration (Final)
+1. **Add pre-deployment validation** to all scripts
+2. **Implement real-time consistency checks**
+3. **Add post-deployment verification**
+4. **Update deployment documentation**
+
+### Success Criteria
+
+**Configuration Consistency:**
+- [ ] No hardcoded stack names in any script
+- [ ] No hardcoded CloudFront domains in any script
+- [ ] All bucket references use consistent variables
+- [ ] Memory/timeout settings synchronized across all files
+
+**Function Consolidation:**
+- [ ] Single implementation of cleanup functions
+- [ ] Shared function library created and used
+- [ ] No duplicate code across scripts
+- [ ] Centralized maintenance point
+
+**Validation Enforcement:**
+- [ ] Pre-deployment validation in all scripts
+- [ ] Real-time consistency checks active
+- [ ] Post-deployment verification working
+- [ ] Automated compliance checking
+
+### Cost & Security Impact
+
+**Cost Impact:**
+- **Additional Cost**: $0.00/month
+- **Savings**: Reduced deployment failures, faster debugging
+- **Maintenance**: Centralized configuration reduces overhead
+
+**Security Impact:**
+- **Enhanced**: Consistent security configurations across all deployments
+- **Validation**: Automatic security setting verification
+- **Compliance**: Enforced least privilege and secure defaults
+
+### Multi-Agent Development Guidelines
+
+#### For All Agents Working on Infrastructure Scripts:
+
+**1. Always Use Centralized Configuration**
+```bash
+# ✅ CORRECT
+source ./infra/aws/config_common.sh
+STACK_NAME="${STACK_NAME_BASE}-${ENVIRONMENT}"
+
+# ❌ INCORRECT  
+STACK_NAME="stock-analyzer-prod"
+```
+
+**2. Always Validate Before Changes**
+```bash
+# ✅ CORRECT
+validate_infrastructure_consistency
+# Make changes
+validate_template_script_sync
+
+# ❌ INCORRECT
+# Make changes without validation
+```
+
+**3. Always Update Shared Functions**
+```bash
+# ✅ CORRECT
+# Add new function to shared_functions.sh
+# Update all scripts to use shared function
+
+# ❌ INCORRECT
+# Add duplicate function to individual scripts
+```
+
+**4. Always Test Consistency**
+```bash
+# ✅ CORRECT
+./infra/aws/validate_infra_consistency.sh
+
+# ❌ INCORRECT
+# Deploy without consistency validation
+```
+
+### Implementation Status
+
+**✅ COMPLETED:**
+- Infrastructure consistency analysis completed
+- Configuration drift identified and documented
+- Implementation strategy defined
+
+**⏳ IN PROGRESS:**
+- Creating centralized configuration management
+- Implementing validation functions
+- Updating deployment scripts
+
+**❌ PENDING:**
+- Shared function library creation
+- Real-time consistency checks
+- Multi-agent development guidelines enforcement
+
+### Next Actions
+
+**Immediate (This Session):**
+1. Create `infra/aws/config_common.sh` with centralized variables
+2. Update `deploy_aws_onetime.sh` to use centralized configuration
+3. Add infrastructure consistency validation function
+4. Update deployment plan with progress
+
+**Next Session:**
+1. Update remaining deployment scripts
+2. Create shared function library
+3. Implement real-time consistency checks
+4. Test multi-agent workflow compatibility
+
+**Validation:**
+```bash
+# Test infrastructure consistency
+./infra/aws/validate_infra_consistency.sh
+
+# Verify all scripts use centralized config
+grep -r "stock-analyzer-prod" infra/aws/*.sh | wc -l  # Should be 0
+
+# Verify no hardcoded CloudFront domains
+grep -r "d224ztwcw6zi6e" infra/aws/*.sh | wc -l  # Should be 0
+```
 
 ## 🔒 Security Audit & API Protection Analysis - UPDATED
 

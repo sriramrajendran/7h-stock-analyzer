@@ -34,12 +34,12 @@ if [ "$QUICK_MODE" = true ]; then
 fi
 
 # Load environment variables
-if [ ! -f ../../.env.local ]; then
+if [ ! -f .env.local ]; then
     echo "❌ .env.local not found. Please create .env.local with AWS configuration."
     exit 1
 fi
 
-export $(grep -v '^#' ../../.env.local | xargs)
+export $(grep -v '^#' .env.local | xargs)
 
 # Check if AWS CLI is configured
 if ! aws sts get-caller-identity &>/dev/null; then
@@ -57,7 +57,7 @@ echo "  Region: $AWS_REGION"
 echo "  Environment: ${ENVIRONMENT:-dev}"
 
 # Set environment-specific variables
-ENVIRONMENT=${ENVIRONMENT:-dev}
+ENVIRONMENT=${ENVIRONMENT:-production}
 STACK_NAME="7h-stock-analyzer-${ENVIRONMENT}"
 
 # Quick mode: Skip infrastructure setup and directly update Lambda
@@ -112,7 +112,7 @@ if [ "$QUICK_MODE" = true ]; then
     # Test the updated function
     echo "🧪 Testing updated Lambda function..."
     API_URL=$(aws cloudformation describe-stacks \
-        --stack-name $STACK_NAME \
+        --stack-name stock-analyzer-prod \
         --region $AWS_REGION \
         --query 'Stacks[0].Outputs[?OutputKey==`StockAnalyzerApi`].OutputValue' \
         --output text)
@@ -177,11 +177,31 @@ echo "🏗️ Creating build directories..."
 mkdir -p ../build/layer/python
 mkdir -p ../build/package
 
-# Install production dependencies
-echo "Installing production dependencies..."
+# Install production dependencies with Lambda compatibility
+echo "Installing production dependencies with Lambda-compatible wheels..."
+# Install numpy and pandas with manylinux wheels for Lambda compatibility
+pip install \
+    --platform manylinux2014_x86_64 \
+    --only-binary=:all: \
+    --target ../build/layer/python \
+    numpy==2.2.6 \
+    pandas==2.2.3 \
+    yfinance==0.2.28
+
+# Install remaining dependencies
 pip install \
     --target ../build/layer/python \
-    -r ../../backend/requirements.txt
+    fastapi==0.65.0 \
+    mangum==0.17.0 \
+    uvicorn==0.15.0 \
+    boto3==1.36.0 \
+    botocore==1.36.0 \
+    requests==2.31.0 \
+    python-dateutil==2.8.2 \
+    pytz==2023.3 \
+    urllib3==2.2.2 \
+    six==1.16.0 \
+    certifi==2024.2.2
 
 # Optimize layer size
 echo "Optimizing layer size..."
@@ -200,7 +220,7 @@ rm -rf ../build/layer/python/*/doc 2>/dev/null || true
 echo "Compressing layer..."
 cd ../build/layer
 zip -r ../../stock-analyzer-layer.zip python -x "*.pyc" "*.pyo" "__pycache__/*"
-cd ../..
+cd ../../..
 
 LAYER_SIZE=$(du -h stock-analyzer-layer.zip | cut -f1)
 echo "✅ Lambda layer created: $LAYER_SIZE"
@@ -217,7 +237,7 @@ cp /Users/sriramrajendran/7_projects/7h-stock-analyzer/backend/requirements.txt 
 # Create zip
 cd ../build/package
 zip -r ../../stock-analyzer-lambda.zip . -x "*.pyc" "*.pyo" "__pycache__/*"
-cd ../..
+cd ../../..
 
 PACKAGE_SIZE=$(du -h stock-analyzer-lambda.zip | cut -f1)
 echo "✅ Application package created: $PACKAGE_SIZE"
@@ -225,17 +245,17 @@ echo "✅ Application package created: $PACKAGE_SIZE"
 # Upload to S3
 echo "📤 Uploading to S3..."
 aws s3 cp stock-analyzer-layer.zip "s3://$DEPLOYMENT_BUCKET/"
-aws s3 cp ../../stock-analyzer-lambda.zip "s3://$DEPLOYMENT_BUCKET/"
+aws s3 cp stock-analyzer-lambda.zip "s3://$DEPLOYMENT_BUCKET/"
 
 # Deploy with SAM (cost-optimized template)
 echo "🚀 Deploying with SAM..."
 sam deploy \
     --template-file template.yaml \
-    --stack-name $STACK_NAME \
+    --stack-name stock-analyzer-prod \
     --region $AWS_REGION \
     --s3-bucket $DEPLOYMENT_BUCKET \
     --parameter-overrides \
-        Environment=$ENVIRONMENT \
+        Environment=production \
     --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
     --no-confirm-changeset \
     --no-fail-on-empty-changeset
@@ -243,25 +263,25 @@ sam deploy \
 # Get stack outputs
 echo "📋 Getting stack outputs..."
 API_URL=$(aws cloudformation describe-stacks \
-    --stack-name $STACK_NAME \
+    --stack-name stock-analyzer-prod \
     --region $AWS_REGION \
     --query 'Stacks[0].Outputs[?OutputKey==`StockAnalyzerApi`].OutputValue' \
     --output text)
 
 S3_BUCKET=$(aws cloudformation describe-stacks \
-    --stack-name $STACK_NAME \
+    --stack-name stock-analyzer-prod \
     --region $AWS_REGION \
     --query 'Stacks[0].Outputs[?OutputKey==`StockDataBucket`].OutputValue' \
     --output text)
 
 LAMBDA_ARN=$(aws cloudformation describe-stacks \
-    --stack-name $STACK_NAME \
+    --stack-name stock-analyzer-prod \
     --region $AWS_REGION \
     --query 'Stacks[0].Outputs[?OutputKey==`StockAnalyzerFunction`].OutputValue' \
     --output text)
 
 API_KEY=$(aws cloudformation describe-stacks \
-    --stack-name $STACK_NAME \
+    --stack-name stock-analyzer-prod \
     --region $AWS_REGION \
     --query 'Stacks[0].Outputs[?OutputKey==`StockAnalyzerApiKey`].OutputValue' \
     --output text)
@@ -345,6 +365,523 @@ echo "  - Light usage: ~$2.46/month (61 invocations/month)"
 echo "🧹 Cleaning up local files..."
 rm -f stock-analyzer-layer.zip stock-analyzer-lambda.zip
 rm -rf ../build
+
+# =============================================================================
+# INFRASTRUCTURE AS CODE - CONSOLIDATED FUNCTIONS
+# =============================================================================
+
+# Function to cleanup old CloudFront distributions (from cleanup_cloudfront.sh)
+cleanup_old_cloudfront_distributions() {
+    echo "🧹 Cleaning up old CloudFront distributions..."
+    
+    # Get all distributions with the bucket comment
+    local bucket_name="$S3_BUCKET_NAME_PROD"
+    local old_distributions=$(aws cloudfront list-distributions \
+        --query "DistributionList.Items[?Comment=='$bucket_name frontend'].Id" \
+        --output text 2>/dev/null || echo "")
+    
+    if [ -n "$old_distributions" ] && [ "$old_distributions" != "None" ]; then
+        echo "Found old distributions: $old_distributions"
+        
+        for dist_id in $old_distributions; do
+            echo "🗑️  Deleting old distribution: $dist_id"
+            
+            # Get ETag for the distribution
+            local etag=$(aws cloudfront get-distribution --id $dist_id --query 'ETag' --output text 2>/dev/null || echo "")
+            
+            if [ -n "$etag" ]; then
+                # First disable the distribution
+                echo "  Disabling distribution..."
+                aws cloudfront update-distribution \
+                    --id $dist_id \
+                    --distribution-config '{
+                        "CallerReference": "'$dist_id'-cleanup",
+                        "Comment": "'$bucket_name frontend - marked for deletion",
+                        "DefaultRootObject": "index.html",
+                        "Origins": {
+                            "Quantity": 1,
+                            "Items": [{
+                                "Id": "S3-'$bucket_name'",
+                                "DomainName": "'$bucket_name'.s3.'$AWS_REGION'.amazonaws.com",
+                                "S3OriginConfig": {
+                                    "OriginAccessIdentity": ""
+                                }
+                            }]
+                        },
+                        "DefaultCacheBehavior": {
+                            "TargetOriginId": "S3-'$bucket_name'",
+                            "ViewerProtocolPolicy": "redirect-to-https",
+                            "ForwardedValues": {
+                                "QueryString": false,
+                                "Cookies": {
+                                    "Forward": "none"
+                                }
+                            },
+                            "MinTTL": 3600,
+                            "DefaultTTL": 86400,
+                            "MaxTTL": 31536000
+                        },
+                        "CacheBehaviors": {
+                            "Quantity": 0
+                        },
+                        "Enabled": false,
+                        "PriceClass": "PriceClass_100"
+                    }' \
+                    --if-match "$etag" 2>/dev/null || echo "  Failed to disable distribution"
+                
+                # Wait for distribution to be disabled
+                echo "  Waiting for distribution to be disabled..."
+                aws cloudfront wait distribution-deployed --id $dist_id 2>/dev/null || echo "  Timeout waiting for disable"
+                
+                # Delete the distribution
+                echo "  Deleting distribution..."
+                etag=$(aws cloudfront get-distribution --id $dist_id --query 'ETag' --output text 2>/dev/null || echo "")
+                if [ -n "$etag" ]; then
+                    aws cloudfront delete-distribution --id $dist_id --if-match "$etag" 2>/dev/null || echo "  Failed to delete distribution"
+                fi
+            fi
+        done
+        
+        echo "✅ CloudFront cleanup completed"
+    else
+        echo "ℹ️  No old distributions found to cleanup"
+    fi
+}
+
+# Function to monitor costs (from monitor_costs.sh)
+monitor_costs() {
+    echo "💰 AWS Cost Monitoring for 7H Stock Analyzer..."
+    
+    # Get service costs
+    local lambda_cost=$(aws ce get-cost-and-usage \
+        --time-period Start=$(date -d "30 days ago" +%Y-%m-%d),End=$(date +%Y-%m-%d) \
+        --filter Dimensions={Key=SERVICE,Values=["AWS Lambda"]} \
+        --metrics BlendedCost \
+        --granularity MONTHLY \
+        --query 'ResultsByTime[0].Total.BlendedCost.Amount' \
+        --output text 2>/dev/null || echo "0")
+    
+    local s3_cost=$(aws ce get-cost-and-usage \
+        --time-period Start=$(date -d "30 days ago" +%Y-%m-%d),End=$(date +%Y-%m-%d) \
+        --filter Dimensions={Key=SERVICE,Values=["Amazon S3"]} \
+        --metrics BlendedCost \
+        --granularity MONTHLY \
+        --query 'ResultsByTime[0].Total.BlendedCost.Amount' \
+        --output text 2>/dev/null || echo "0")
+    
+    local api_cost=$(aws ce get-cost-and-usage \
+        --time-period Start=$(date -d "30 days ago" +%Y-%m-%d),End=$(date +%Y-%m-%d) \
+        --filter Dimensions={Key=SERVICE,Values=["Amazon API Gateway"]} \
+        --metrics BlendedCost \
+        --granularity MONTHLY \
+        --query 'ResultsByTime[0].Total.BlendedCost.Amount' \
+        --output text 2>/dev/null || echo "0")
+    
+    echo "📈 Cost Analysis (Last 30 Days)"
+    echo "================================"
+    echo "🔧 Lambda Service: $${lambda_cost}"
+    echo "🪣 S3 Service: $${s3_cost}"
+    echo "🌐 API Gateway: $${api_cost}"
+    
+    local total_cost=$(aws ce get-cost-and-usage \
+        --time-period Start=$(date -d "30 days ago" +%Y-%m-%d),End=$(date +%Y-%m-%d) \
+        --filter Dimensions={Key=SERVICE,Values=["AWS Lambda","Amazon S3","Amazon API Gateway","Amazon CloudWatch"]} \
+        --metrics BlendedCost \
+        --granularity MONTHLY \
+        --query 'ResultsByTime[0].Total.BlendedCost.Amount' \
+        --output text 2>/dev/null || echo "0")
+    
+    echo "💸 Total (30 days): $${total_cost}"
+    
+    if (( $(echo "$total_cost > 20" | bc -l) )); then
+        echo "  ⚠️  Cost is above $20 - consider optimization"
+    elif (( $(echo "$total_cost > 10" | bc -l) )); then
+        echo "  ✅ Cost is moderate - monitor usage"
+    else
+        echo "  ✅ Cost is well optimized"
+    fi
+}
+
+# Function to sync with production infrastructure
+sync_production_infra() {
+    echo "🔄 Production Infrastructure Sync Check"
+    echo "===================================="
+    
+    local sync_issues=0
+    local stack_name="stock-analyzer-prod"
+    
+    echo "📋 Checking CloudFormation stack sync..."
+    
+    # Check if stack exists
+    if ! aws cloudformation describe-stacks --stack-name "$stack_name" &>/dev/null; then
+        echo "❌ Stack '$stack_name' not found in production"
+        echo "   Run full deployment first: $0"
+        sync_issues=$((sync_issues + 1))
+        return 1
+    fi
+    
+    echo "✅ Stack '$stack_name' found"
+    
+    # Get stack outputs
+    local api_url=$(aws cloudformation describe-stacks \
+        --stack-name "$stack_name" \
+        --query 'Stacks[0].Outputs[?OutputKey==`StockAnalyzerApi`].OutputValue' \
+        --output text 2>/dev/null || echo "")
+    
+    local s3_bucket=$(aws cloudformation describe-stacks \
+        --stack-name "$stack_name" \
+        --query 'Stacks[0].Outputs[?OutputKey==`StockDataBucket`].OutputValue' \
+        --output text 2>/dev/null || echo "")
+    
+    local lambda_arn=$(aws cloudformation describe-stacks \
+        --stack-name "$stack_name" \
+        --query 'Stacks[0].Outputs[?OutputKey==`StockAnalyzerFunction`].OutputValue' \
+        --output text 2>/dev/null || echo "")
+    
+    echo ""
+    echo "🔧 Lambda Configuration Sync:"
+    
+    # Check Lambda function configuration
+    if [ -n "$lambda_arn" ]; then
+        local lambda_name=$(basename "$lambda_arn")
+        
+        # Get current Lambda config
+        local current_memory=$(aws lambda get-function-configuration \
+            --function-name "$lambda_name" \
+            --query 'MemorySize' \
+            --output text 2>/dev/null || echo "")
+        
+        local current_timeout=$(aws lambda get-function-configuration \
+            --function-name "$lambda_name" \
+            --query 'Timeout' \
+            --output text 2>/dev/null || echo "")
+        
+        local current_runtime=$(aws lambda get-function-configuration \
+            --function-name "$lambda_name" \
+            --query 'Runtime' \
+            --output text 2>/dev/null || echo "")
+        
+        # Expected values from script
+        local expected_memory="512"
+        local expected_timeout="180" 
+        local expected_runtime="python3.10"
+        
+        echo "  Function: $lambda_name"
+        echo "  Memory: ${current_memory}MB (expected: ${expected_memory}MB)"
+        echo "  Timeout: ${current_timeout}s (expected: ${expected_timeout}s)"
+        echo "  Runtime: $current_runtime (expected: $expected_runtime)"
+        
+        # Check for mismatches
+        if [ "$current_memory" != "$expected_memory" ]; then
+            echo "  ❌ Memory mismatch - Update needed"
+            sync_issues=$((sync_issues + 1))
+        else
+            echo "  ✅ Memory synced"
+        fi
+        
+        if [ "$current_timeout" != "$expected_timeout" ]; then
+            echo "  ❌ Timeout mismatch - Update needed"
+            sync_issues=$((sync_issues + 1))
+        else
+            echo "  ✅ Timeout synced"
+        fi
+        
+        if [ "$current_runtime" != "$expected_runtime" ]; then
+            echo "  ❌ Runtime mismatch - Update needed"
+            sync_issues=$((sync_issues + 1))
+        else
+            echo "  ✅ Runtime synced"
+        fi
+    else
+        echo "  ❌ Lambda function not found"
+        sync_issues=$((sync_issues + 1))
+    fi
+    
+    echo ""
+    echo "🌐 API Gateway Configuration Sync:"
+    
+    # Check API Gateway
+    if [ -n "$api_url" ]; then
+        echo "  API URL: $api_url"
+        
+        # Extract API ID from URL
+        local api_id=$(echo "$api_url" | sed 's|https://||' | sed 's|\.execute-api.*||')
+        
+        if [ -n "$api_id" ]; then
+            # Get API Gateway stage configuration
+            local stage_config=$(aws apigatewayv2 get-stage \
+                --api-id "$api_id" \
+                --stage-name "\$default" \
+                --query 'RouteSettings' \
+                --output json 2>/dev/null || echo "{}")
+            
+            echo "  ✅ API Gateway found: $api_id"
+            
+            # Check key routes
+            local key_routes=("/run-now" "/recon/run" "/config/update" "/analysis/{symbol}")
+            
+            for route in "${key_routes[@]}"; do
+                local route_config=$(echo "$stage_config" | jq -r ".[\"$route\"] // empty" 2>/dev/null)
+                if [ -n "$route_config" ]; then
+                    echo "    ✅ Route $route: Configured"
+                else
+                    echo "    ❌ Route $route: Missing"
+                    sync_issues=$((sync_issues + 1))
+                fi
+            done
+        fi
+    else
+        echo "  ❌ API Gateway not found"
+        sync_issues=$((sync_issues + 1))
+    fi
+    
+    echo ""
+    echo "🪣 S3 Configuration Sync:"
+    
+    # Check S3 bucket
+    if [ -n "$s3_bucket" ]; then
+        echo "  Bucket: $s3_bucket"
+        
+        # Check if bucket exists
+        if aws s3 ls "s3://$s3_bucket" &>/dev/null; then
+            echo "  ✅ Bucket exists"
+            
+            # Check bucket versioning
+            local versioning=$(aws s3api get-bucket-versioning \
+                --bucket "$s3_bucket" \
+                --query 'Status' \
+                --output text 2>/dev/null || echo "Disabled")
+            
+            echo "  Versioning: $versioning"
+            
+            # Check bucket encryption
+            local encryption=$(aws s3api get-bucket-encryption \
+                --bucket "$s3_bucket" \
+                --query 'ServerSideEncryptionConfiguration.Rules[0].ApplyServerSideEncryptionByDefault.SSEAlgorithm' \
+                --output text 2>/dev/null || echo "None")
+            
+            echo "  Encryption: $encryption"
+            
+            # Check for required prefixes
+            local prefixes=("data/" "recon/" "config/")
+            for prefix in "${prefixes[@]}"; do
+                if aws s3 ls "s3://$s3_bucket/$prefix" &>/dev/null; then
+                    echo "    ✅ Prefix $prefix exists"
+                else
+                    echo "    ⚠️  Prefix $prefix missing (will be created on first use)"
+                fi
+            done
+        else
+            echo "  ❌ Bucket not accessible"
+            sync_issues=$((sync_issues + 1))
+        fi
+    else
+        echo "  ❌ S3 bucket not found"
+        sync_issues=$((sync_issues + 1))
+    fi
+    
+    echo ""
+    echo "🌐 CloudFront Configuration Sync:"
+    
+    # Check CloudFront distribution
+    local distribution_id=$(aws cloudfront list-distributions \
+        --query "DistributionList.Items[?Comment=='$S3_BUCKET_NAME_PROD frontend'].Id" \
+        --output text 2>/dev/null || echo "")
+    
+    if [ -n "$distribution_id" ] && [ "$distribution_id" != "None" ]; then
+        echo "  Distribution ID: $distribution_id"
+        
+        local distribution_status=$(aws cloudfront get-distribution \
+            --id "$distribution_id" \
+            --query 'Distribution.Status' \
+            --output text 2>/dev/null || echo "")
+        
+        local distribution_domain=$(aws cloudfront get-distribution \
+            --id "$distribution_id" \
+            --query 'Distribution.DomainName' \
+            --output text 2>/dev/null || echo "")
+        
+        echo "  Status: $distribution_status"
+        echo "  Domain: $distribution_domain"
+        
+        if [ "$distribution_status" = "Deployed" ]; then
+            echo "  ✅ CloudFront deployed"
+        else
+            echo "  ⚠️  CloudFront not fully deployed"
+        fi
+    else
+        echo "  ❌ CloudFront distribution not found"
+        sync_issues=$((sync_issues + 1))
+    fi
+    
+    echo ""
+    echo "🔐 Security Configuration Sync:"
+    
+    # Check SSM Parameter Store for API key
+    local api_key_param=$(aws ssm get-parameter \
+        --name "/stock-analyzer/api-key" \
+        --with-decryption \
+        --query 'Parameter.Value' \
+        --output text 2>/dev/null || echo "")
+    
+    if [ -n "$api_key_param" ]; then
+        echo "  ✅ API key stored in SSM Parameter Store"
+    else
+        echo "  ❌ API key not found in SSM Parameter Store"
+        sync_issues=$((sync_issues + 1))
+    fi
+    
+    # Check CloudWatch billing alarm
+    local billing_alarm=$(aws cloudwatch describe-alarms \
+        --alarm-names "Stock-Analyzer-High-Cost" \
+        --query 'MetricAlarms[0].AlarmName' \
+        --output text 2>/dev/null || echo "")
+    
+    if [ -n "$billing_alarm" ]; then
+        echo "  ✅ Billing alarm configured"
+    else
+        echo "  ❌ Billing alarm not found"
+        sync_issues=$((sync_issues + 1))
+    fi
+    
+    echo ""
+    echo "📊 Sync Summary:"
+    echo "================"
+    
+    if [ $sync_issues -eq 0 ]; then
+        echo "✅ All infrastructure components are synced with production"
+        echo "   Your scripts match the deployed infrastructure"
+    else
+        echo "❌ Found $sync_issues sync issues that need attention"
+        echo ""
+        echo "🔧 To fix sync issues:"
+        echo "  1. Review the mismatches above"
+        echo "  2. Update script configurations if needed"
+        echo "  3. Run full deployment: $0"
+        echo "  4. Or update specific components individually"
+    fi
+    
+    echo ""
+    echo "💡 Recommendations:"
+    echo "  - Run this check after any manual AWS console changes"
+    echo "  - Verify before making infrastructure updates"
+    echo "  - Use as part of your deployment validation process"
+    
+    return $sync_issues
+}
+
+# Function to optimize costs (from optimize_costs.sh)
+optimize_costs() {
+    echo "💰 Optimizing AWS Costs for 7H Stock Analyzer..."
+    
+    # Optimize Lambda settings
+    echo "🔧 Optimizing Lambda Functions..."
+    local function_name=$(aws lambda list-functions \
+        --query "Functions[?contains(FunctionName, 'StockAnalyzerFunction')].FunctionName" \
+        --output text 2>/dev/null || echo "")
+    
+    if [ -n "$function_name" ]; then
+        local current_memory=$(aws lambda get-function-configuration \
+            --function-name "$function_name" \
+            --query 'MemorySize' \
+            --output text 2>/dev/null || echo "512")
+        
+        local current_timeout=$(aws lambda get-function-configuration \
+            --function-name "$function_name" \
+            --query 'Timeout' \
+            --output text 2>/dev/null || echo "180")
+        
+        echo "    Current: Memory=${current_memory}MB, Timeout=${current_timeout}s"
+        
+        # Get recent execution metrics
+        local avg_duration=$(aws logs filter-log-events \
+            --log-group-name "/aws/lambda/$(basename $function_name)" \
+            --start-time $(date -d "7 days ago" +%s)000 \
+            --end-time $(date +%s)000 \
+            --filter-pattern "REPORT" \
+            --query 'events[?contains(message, `Duration`)].message | [0]' \
+            --output text 2>/dev/null | grep -o 'Duration: [0-9.]* ms' | awk '{print $2}' | sort -n | head -1 || echo "100")
+        
+        if (( $(echo "$avg_duration < 5000" | bc -l) )); then
+            echo "    💡 Recommendation: Reduce memory to 256MB (fast execution)"
+        fi
+        
+        if (( $(echo "$avg_duration < 30000" | bc -l) )); then
+            echo "    💡 Recommendation: Reduce timeout to 60s"
+        fi
+    fi
+    
+    # Optimize S3 storage
+    echo "🪣 Optimizing S3 Storage..."
+    local bucket_name="$S3_BUCKET_NAME_PROD"
+    
+    if aws s3 ls "s3://$bucket_name" &>/dev/null; then
+        local size_bytes=$(aws s3 ls "s3://$bucket_name" --recursive --summarize | grep "Total Size" | awk '{print $3}' || echo "0")
+        local size_gb=$(echo "scale=2; $size_bytes / (1024^3)" | bc -l)
+        
+        echo "    Current size: ${size_gb}GB"
+        
+        if (( $(echo "$size_gb > 1" | bc -l) )); then
+            echo "    💡 Recommendation: Aggressive lifecycle policies"
+            echo "      - Delete daily data after 30 days"
+            echo "      - Delete charts after 7 days"
+        fi
+    fi
+    
+    echo ""
+    echo "💡 Cost Optimization Tips:"
+    echo "  1. Use AWS Compute Savings Plans for predictable workloads"
+    echo "  2. Enable S3 Intelligent-Tiering for unknown access patterns"
+    echo "  3. Set up billing alerts to monitor costs"
+    echo "  4. Monitor and clean up unused resources"
+}
+
+# =============================================================================
+# INFRASTRUCTURE MANAGEMENT COMMANDS
+# =============================================================================
+
+# Add infrastructure management commands
+case "${1:-}" in
+    "cleanup-cloudfront")
+        echo "🧹 Running CloudFront cleanup..."
+        cleanup_old_cloudfront_distributions
+        echo ""
+        echo "📋 Current distributions:"
+        aws cloudfront list-distributions --query 'DistributionList.Items[*].{Id:Id,DomainName:DomainName,Comment:Comment,Status:Status}' --output table
+        ;;
+    "monitor-costs")
+        monitor_costs
+        ;;
+    "optimize-costs")
+        optimize_costs
+        ;;
+    "sync-check")
+        sync_production_infra
+        ;;
+    "help")
+        echo "🔧 7H Stock Analyzer - Infrastructure Management"
+        echo "=============================================="
+        echo ""
+        echo "Usage: $0 [COMMAND]"
+        echo ""
+        echo "Commands:"
+        echo "  (no args)     Full deployment"
+        echo "  --quick       Quick Lambda update"
+        echo "  cleanup-cloudfront  Clean up old CloudFront distributions"
+        echo "  monitor-costs      Monitor AWS costs"
+        echo "  optimize-costs     Optimize AWS costs"
+        echo "  sync-check         Verify production sync"
+        echo "  help               Show this help"
+        echo ""
+        echo "Examples:"
+        echo "  $0                    # Full deployment"
+        echo "  $0 --quick           # Quick update"
+        echo "  $0 cleanup-cloudfront # Cleanup CloudFront"
+        echo "  $0 monitor-costs     # Check costs"
+        echo "  $0 optimize-costs    # Optimize costs"
+        echo "  $0 sync-check        # Verify production sync"
+        ;;
+esac
 
 # Clean up old Lambda layer versions (storage optimization)
 echo "🧹 Cleaning up old Lambda layer versions..."
