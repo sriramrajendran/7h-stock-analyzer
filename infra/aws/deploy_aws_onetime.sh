@@ -950,8 +950,64 @@ case "${1:-}" in
     "sync-check")
         sync_production_infra
         ;;
+    "deploy")
+        echo "🚀 7H Stock Analyzer - One Click Deployment"
+        echo "======================================"
+        
+        # Detect what changed
+        echo "🔍 Detecting changes..."
+        
+        # Check if frontend changed
+        FRONTEND_CHANGED=false
+        if [ -f "../../frontend/package.json" ]; then
+            if git status --porcelain ../../frontend/ 2>/dev/null | grep -q .; then
+                FRONTEND_CHANGED=true
+                echo "  📱 Frontend changes detected"
+            fi
+        fi
+        
+        # Check if backend changed
+        BACKEND_CHANGED=false
+        if [ -f "../../backend/requirements.txt" ]; then
+            if git status --porcelain ../../backend/ 2>/dev/null | grep -q .; then
+                BACKEND_CHANGED=true
+                echo "  🔧 Backend changes detected"
+            fi
+        fi
+        
+        # Deploy based on changes
+        if [ "$FRONTEND_CHANGED" = true ] && [ "$BACKEND_CHANGED" = true ]; then
+            echo "🔄 Deploying both Frontend and Backend..."
+            
+            # Deploy backend first (quick mode)
+            echo "  � Deploying Lambda..."
+            ./deploy_aws_onetime.sh --quick
+            
+            # Deploy frontend
+            echo "  🌐 Deploying Frontend..."
+            ./deploy_frontend.sh prod
+            
+        elif [ "$BACKEND_CHANGED" = true ]; then
+            echo "📦 Deploying Lambda only..."
+            ./deploy_aws_onetime.sh --quick
+            
+        elif [ "$FRONTEND_CHANGED" = true ]; then
+            echo "🌐 Deploying Frontend only..."
+            ./deploy_frontend.sh prod
+            
+        else
+            echo "ℹ️  No changes detected - deploying latest code..."
+            ./deploy_aws_onetime.sh --quick
+        fi
+        
+        echo ""
+        echo "✅ One-click deployment completed!"
+        echo ""
+        echo "🧪 Quick Test:"
+        echo "  curl -H \"X-API-Key: \$API_KEY\" https://8s0seutfrh.execute-api.us-east-1.amazonaws.com/health"
+        ;;
     "help")
-        echo "🔧 7H Stock Analyzer - Infrastructure Management"
+        echo "�🔧 7H Stock Analyzer - Infrastructure Management"
         echo "=============================================="
         echo ""
         echo "Usage: $0 [COMMAND]"
@@ -959,19 +1015,25 @@ case "${1:-}" in
         echo "Commands:"
         echo "  (no args)     Full deployment"
         echo "  --quick       Quick Lambda update"
+        echo "  --lambda-only Lambda-only update"
+        echo "  --frontend-only Frontend-only update"
+        echo "  deploy        One-click deployment (auto-detect changes)"
         echo "  cleanup-cloudfront  Clean up old CloudFront distributions"
-        echo "  monitor-costs      Monitor AWS costs"
-        echo "  optimize-costs     Optimize AWS costs"
-        echo "  sync-check         Verify production sync"
-        echo "  help               Show this help"
+        echo "  monitor-costs       Monitor AWS costs"
+        echo "  optimize-costs      Optimize AWS costs"
+        echo "  sync-check          Check infrastructure sync"
+        echo "  help                Show this help"
         echo ""
         echo "Examples:"
         echo "  $0                    # Full deployment"
-        echo "  $0 --quick           # Quick update"
-        echo "  $0 cleanup-cloudfront # Cleanup CloudFront"
-        echo "  $0 monitor-costs     # Check costs"
-        echo "  $0 optimize-costs    # Optimize costs"
-        echo "  $0 sync-check        # Verify production sync"
+        echo "  $0 --quick            # Quick Lambda update"
+        echo "  $0 deploy             # One-click deployment"
+        echo "  $0 monitor-costs      # Check costs"
+        ;;
+    *)
+        echo "❌ Unknown command: $1"
+        echo "Use '$0 help' for available commands"
+        exit 1
         ;;
 esac
 

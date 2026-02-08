@@ -14,29 +14,35 @@ A comprehensive, modular stock analysis system built with serverless architectur
 - **Cost Optimized**: < $15/month estimated cost
 - **Real-time Notifications**: Pushover integration for significant recommendations
 
-## � Automated Scheduling
+## ⏰ Automated Scheduling
 
-### AWS Lambda Triggers
-- **Market Open**: 30 minutes after market open (10:00 AM EST)
-- **Midday**: 12:30 PM EST trading update
-- **Weekly Reconciliation**: Sunday 6:00 PM EST (profit/stop loss tracking)
+### EventBridge Rules (Active)
+- **Market Open Alert**: 9:00 AM EST (2:00 PM UTC) Monday-Friday
+- **Midday Alert**: 12:30 PM EST (5:30 PM UTC) Monday-Friday  
+- **Weekly Reconciliation**: Sunday 6:00 PM EST (11:00 PM UTC)
 
-### Local Development
+### Manual Triggers
 ```bash
-# Manual reconciliation (for testing)
-curl -X POST http://localhost:8000/recon/run
-
-# View performance summary
-curl http://localhost:8000/recon/summary
-```
-
-### AWS Deployment
-```bash
-# Weekly reconciliation is automatically configured during deployment
-./infra/aws/deploy_aws_onetime.sh
+# Manual analysis trigger with notifications
+curl -X POST -H "X-API-Key: $API_KEY" https://your-api-gateway-url/run-now
 
 # Manual reconciliation trigger
-curl -X POST https://your-api-gateway-url/recon/run
+curl -X POST -H "X-API-Key: $API_KEY" https://your-api-gateway-url/recon/run
+
+# View performance summary
+curl -H "X-API-Key: $API_KEY" https://your-api-gateway-url/recon/summary
+```
+
+### Notification Setup
+Pushover notifications are automatically sent for:
+- ✅ **Manual triggers** (`/run-now` endpoint)
+- ✅ **Scheduled runs** (EventBridge triggers)
+- ✅ **Significant recommendations** (Buy/Strong Buy signals)
+
+Configure Pushover credentials in `.env.local`:
+```bash
+PUSHOVER_TOKEN=your_pushover_api_token
+PUSHOVER_USER=your_pushover_user_key
 ```
 
 ## 🧪 Testing & Quality Assurance
@@ -128,20 +134,52 @@ python -m pytest backend/tests/test_api_endpoints.py -v         # API integrity
 
 ### AWS Deployment
 
-1. **Deploy Backend**
-   ```bash
-   ENVIRONMENT=dev ./infra/aws/deploy_aws_onetime.sh
-   ```
+#### 🚀 One-Click Deployment (Recommended)
+```bash
+# Smart deployment - auto-detects changes and deploys accordingly
+./infra/aws/deploy_aws_onetime.sh deploy
+```
 
-2. **Deploy Frontend**
-   ```bash
-   ./infra/aws/deploy_frontend.sh dev
-   ```
+**What it does:**
+- 🔍 **Auto-detects** changes in frontend/ and backend/ directories
+- 📦 **Deploys Lambda** if backend code changed (quick mode)
+- 🌐 **Deploys Frontend** if UI code changed
+- ⚡ **Quick updates** for frequent code changes
+- 🔐 **Auto-configures** all environment variables from .env.local
 
-3. **Monitor Costs**
-   ```bash
-   ./infra/aws/monitor_costs.sh
-   ```
+#### Manual Deployment Options
+```bash
+# Full deployment (first time setup)
+./infra/aws/deploy_aws_onetime.sh
+
+# Quick Lambda update (code changes only)
+./infra/aws/deploy_aws_onetime.sh --quick
+
+# Frontend only deployment
+./infra/aws/deploy_frontend.sh prod
+
+# Monitor costs
+./infra/aws/deploy_aws_onetime.sh monitor-costs
+```
+
+#### Environment Setup
+Create `.env.local` with your credentials:
+```bash
+# AWS Configuration
+AWS_REGION=us-east-1
+S3_BUCKET_NAME_PROD=7h-stock-analyzer
+
+# API Authentication  
+API_KEY=your-api-key-here
+
+# Pushover Notifications
+PUSHOVER_TOKEN=your_pushover_api_token
+PUSHOVER_USER=your_pushover_user_key
+
+# Application Settings
+ENVIRONMENT=production
+LOG_LEVEL=INFO
+```
 
 ## 📋 API Endpoints
 
