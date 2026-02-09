@@ -136,8 +136,8 @@ class DataLoader:
     
     def fetch_universe(self, tickers: List[str], period: str = "1y") -> Dict[str, pd.DataFrame]:
         """Fetch data for entire universe with optimization for large sets"""
-        # Always use very small batches to avoid rate limiting
-        return self.fetch_batch(tickers, period, batch_size=2, max_workers=1)
+        # Always use small batches to avoid rate limiting
+        return self.fetch_batch(tickers, period, batch_size=5, max_workers=1)
     
     def _get_from_cache(self, ticker: str) -> Optional[pd.DataFrame]:
         """Get data from S3 cache if available and fresh"""

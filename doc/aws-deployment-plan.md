@@ -49,12 +49,13 @@
   - Cost reduction: Simplified S3 operations and file management
   - Maintainability improvement: Single source of truth for all configurations
 - **Environment-Based Configuration Strategy** (February 8, 2026)
-  - Updated `.env.local.example` to default `ENVIRONMENT=production` and `REACT_APP_ENVIRONMENT=production`
-  - Modified `start_local.sh` to override environment variables to `development` for local runs
-  - Updated backend `config.py` to use environment-based S3 bucket selection
-  - Production uses `S3_BUCKET_NAME_PROD`, development uses `S3_BUCKET_NAME_LOCAL`
+  - Updated `.env.local.example` to default `ENVIRONMENT=aws` and `REACT_APP_ENVIRONMENT=local`
+  - Modified `start_local.sh` to override environment variables to `local` for local runs
+  - Updated backend `config.py` to use Lambda detection for environment-based S3 bucket selection
+  - AWS uses `S3_BUCKET_NAME_PROD`, local uses `S3_BUCKET_NAME_LOCAL`
   - Prevents AWS and local version collisions in code
   - Enhanced deployment safety: Environment-specific resource isolation
+  - **Simplified Environment Variables**: Now only uses 'aws' and 'local' (removed 'production' and 'development')
 - **Complete Code Cleanup** (February 8, 2026)
   - Removed unused upload scripts and mock services
   - Cleaned up old local_config and s3_data directories

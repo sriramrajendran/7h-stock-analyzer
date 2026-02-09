@@ -79,8 +79,8 @@ app.add_middleware(StructuredErrorLoggingMiddleware)
 @app.get("/health")
 def health_check(auth: bool = Depends(verify_api_key)):
     """Health check endpoint - optimized for minimal cost"""
-    # In production, skip timestamp generation to reduce computation
-    if os.getenv('ENVIRONMENT') == 'prod':
+    # In AWS, skip timestamp generation to reduce computation
+    if os.getenv('AWS_LAMBDA_FUNCTION_NAME'):
         return {
             "status": "healthy",
             "timestamp": "2024-01-01T00:00:00.000000",  # Static timestamp in prod
@@ -186,42 +186,6 @@ def get_config(config_type: str, auth: bool = Depends(verify_api_key)):
 def get_config_json(config_type: str, auth: bool = Depends(verify_api_key)):
     """Get configuration as JSON (for frontend compatibility)"""
     return get_config(config_type, auth)
-
-
-@app.get("/history/dates")
-def get_available_dates_endpoint(auth: bool = Depends(verify_api_key)):
-    """Get available historical dates"""
-    try:
-        from app.services.s3_store import get_available_dates
-        
-        result = get_available_dates()
-        if not result.get('success', False):
-            raise HTTPException(status_code=404, detail=result.get('error', 'Dates not available'))
-            
-        return result
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get available dates: {str(e)}")
-
-
-@app.get("/history/{date}")
-def get_historical_recommendations(date: str, auth: bool = Depends(verify_api_key)):
-    """Get historical recommendations for a specific date"""
-    try:
-        from app.services.s3_store import get_historical_data
-        
-        result = get_historical_data(date)
-        if not result.get('success', False):
-            raise HTTPException(status_code=404, detail=result.get('error', 'Historical data not found'))
-            
-        return result
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get historical data: {str(e)}")
 
 
 @app.get("/recommendations")

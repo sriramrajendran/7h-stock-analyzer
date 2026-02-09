@@ -13,8 +13,8 @@ fi
 export $(grep -v '^#' .env.local | xargs)
 
 # Override environment variables for local development
-export ENVIRONMENT=development
-export REACT_APP_ENVIRONMENT=development
+export ENVIRONMENT=local
+export REACT_APP_ENVIRONMENT=local
 
 # Check AWS credentials
 if ! aws sts get-caller-identity &>/dev/null; then

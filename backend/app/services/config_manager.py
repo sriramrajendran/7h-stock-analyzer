@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 # Configuration
 # For local development, use dev bucket; for AWS, use production bucket
-if os.getenv('ENVIRONMENT') == 'production':
+if os.getenv('AWS_LAMBDA_FUNCTION_NAME'):
     BUCKET_NAME = os.getenv('S3_BUCKET_NAME_PROD', '7h-stock-analyzer')
 else:
     BUCKET_NAME = os.getenv('S3_BUCKET_NAME_LOCAL', os.getenv('S3_BUCKET_NAME', '7h-stock-analyzer-dev'))
@@ -220,7 +220,7 @@ def update_config_in_s3(config_type: str, symbols: List[str], backup: bool = Tru
         # Update the configuration
         config_data['configurations'][config_type] = {
             'name': config_type.title().replace('_', ' '),
-            'description': f'{config_type.title().replace('_', ' ')} stocks',
+            'description': f'{config_type.title().replace("_", " ")} stocks',
             'symbols': valid_symbols,
             'count': len(valid_symbols),
             'last_updated': datetime.utcnow().isoformat()

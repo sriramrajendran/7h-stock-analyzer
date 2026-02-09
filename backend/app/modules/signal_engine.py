@@ -3,7 +3,7 @@ Signal Engine Module - Generates individual indicator signals and aggregates int
 """
 
 import pandas as pd
-import numpy as np
+# import numpy as np
 import warnings
 from typing import Dict, List, Tuple, Optional
 import logging

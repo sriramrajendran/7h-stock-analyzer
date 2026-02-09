@@ -57,7 +57,7 @@ echo "  Region: $AWS_REGION"
 echo "  Environment: ${ENVIRONMENT:-dev}"
 
 # Set environment-specific variables
-ENVIRONMENT=${ENVIRONMENT:-production}
+ENVIRONMENT=${ENVIRONMENT:-aws}
 STACK_NAME="7h-stock-analyzer-${ENVIRONMENT}"
 
 # Quick mode: Skip infrastructure setup and directly update Lambda
@@ -117,7 +117,7 @@ if [ "$QUICK_MODE" = true ]; then
 {
     "Variables": {
         "API_KEY": "$API_KEY",
-        "ENVIRONMENT": "${ENVIRONMENT:-production}",
+        "ENVIRONMENT": "aws",
         "APP_AWS_REGION": "$AWS_REGION",
         "S3_BUCKET_NAME": "$S3_BUCKET_NAME_PROD",
         "LOG_LEVEL": "${LOG_LEVEL:-INFO}",
@@ -293,7 +293,7 @@ sam deploy \
     --region $AWS_REGION \
     --s3-bucket $DEPLOYMENT_BUCKET \
     --parameter-overrides \
-        Environment=production \
+        Environment=aws \
     --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
     --no-confirm-changeset \
     --no-fail-on-empty-changeset
@@ -360,7 +360,7 @@ if [ -n "$LAMBDA_FUNCTION_NAME" ] && [ "$LAMBDA_FUNCTION_NAME" != "None" ]; then
 {
     "Variables": {
         "API_KEY": "$API_KEY",
-        "ENVIRONMENT": "${ENVIRONMENT:-production}",
+        "ENVIRONMENT": "aws",
         "APP_AWS_REGION": "$AWS_REGION",
         "S3_BUCKET_NAME": "$S3_BUCKET_NAME_PROD",
         "LOG_LEVEL": "${LOG_LEVEL:-INFO}",

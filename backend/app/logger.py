@@ -58,7 +58,7 @@ class CostOptimizedLogger:
             'timestamp': datetime.utcnow().isoformat(),
             'level': level,
             'message': message,
-            'environment': os.getenv('ENVIRONMENT', 'dev'),
+            'environment': 'aws' if os.getenv('AWS_LAMBDA_FUNCTION_NAME') else 'local',
             'lambda_function': os.getenv('AWS_LAMBDA_FUNCTION_NAME', 'local'),
             **kwargs
         }

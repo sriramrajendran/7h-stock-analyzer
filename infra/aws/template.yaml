@@ -244,6 +244,18 @@ Resources:
         "GET /analysis/{ticker}/indicators":
           ThrottlingBurstLimit: 3
           ThrottlingRateLimit: 1
+        "GET /config/{config_type}":
+          ThrottlingBurstLimit: 3
+          ThrottlingRateLimit: 1
+        "GET /config/{config_type}.json":
+          ThrottlingBurstLimit: 3
+          ThrottlingRateLimit: 1
+        "GET /history/dates":
+          ThrottlingBurstLimit: 3
+          ThrottlingRateLimit: 1
+        "GET /history/{date}":
+          ThrottlingBurstLimit: 3
+          ThrottlingRateLimit: 1
       DefaultRouteSettings:
         ThrottlingBurstLimit: 3
         ThrottlingRateLimit: 1

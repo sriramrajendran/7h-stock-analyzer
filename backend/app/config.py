@@ -8,7 +8,7 @@ from typing import List
 
 # AWS Configuration
 AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
-if os.getenv('ENVIRONMENT') == 'production':
+if os.getenv('AWS_LAMBDA_FUNCTION_NAME'):
     S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME_PROD', '7h-stock-analyzer')
 else:
     S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME_LOCAL', '7h-stock-analyzer-dev')
@@ -63,7 +63,7 @@ def load_symbols_from_config() -> List[str]:
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
 ENABLE_DEBUG_LOGGING = LOG_LEVEL.upper() == 'DEBUG'
 ENABLE_VERBOSE_LOGGING = os.getenv('ENABLE_VERBOSE_LOGGING', 'false').lower() == 'true'
-ENVIRONMENT = os.getenv('ENVIRONMENT', 'dev')
+ENVIRONMENT = 'aws' if os.getenv('AWS_LAMBDA_FUNCTION_NAME') else 'local'
 
 # Cost-optimized logging settings
 # AWS Lambda defaults to WARNING level, localhost defaults to INFO
