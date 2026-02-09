@@ -5,7 +5,7 @@ echo "🚀 Starting local development environment..."
 
 # Check if .env.local exists
 if [ ! -f .env.local ]; then
-    echo "❌ .env.local not found. Please run './infra/local/setup_local_onetime.sh' first."
+    echo "❌ .env.local not found. Please create .env.local with AWS configuration."
     exit 1
 fi
 
@@ -91,7 +91,7 @@ echo "🔧 Backend API: http://localhost:$API_PORT"
 echo "📚 API Docs: http://localhost:$API_PORT/docs"
 echo "🪣 S3 Bucket: s3://$S3_BUCKET_NAME"
 echo ""
-echo "🛑 To stop: Press Ctrl+C or run './infra/local/stop_local.sh'"
+echo "🛑 To stop: Press Ctrl+C or run './stop.sh'"
 echo ""
 echo "💡 Useful commands:"
 echo "  - Test API: curl http://localhost:$API_PORT/health"

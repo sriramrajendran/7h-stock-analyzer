@@ -125,3 +125,6 @@ infra/build/
 frontend/.env.local
 frontend/.env.production
 frontend/.env.example
+
+# Target directory for all non-git tracked files
+target/

@@ -85,6 +85,15 @@
   - **Dependencies Included**: FastAPI, Mangum, Numpy, Pandas, yfinance, requests, exceptiongroup, and all transitive dependencies
   - **Layer Size**: 39MB (under 70MB AWS limit)
   - **Result**: All API endpoints now working correctly, no more import errors
+- **Project Structure Reorganization** (February 9, 2026)
+  - **Split template.yaml**: Lambda infrastructure → backend/template.yaml, Infrastructure → infra/aws/infra-template.yaml
+  - **Removed Old Template**: Deleted confusing infra/aws/template.yaml (monolithic)
+  - **Mutually Exclusive Directories**: backend/, infra/, frontend/ have zero overlapping infrastructure code
+  - **Simplified Deployment Scripts**: 5 independent scripts (no orchestration complexity)
+  - **Centralized Build Artifacts**: target/ directory for all non-git tracked files
+  - **Local Development**: Moved start.sh/stop.sh to base directory (starts UI + backend together)
+  - **Removed Redundant Scripts**: backend/deploy_local_app.sh removed, deploy_aws_onetime.sh removed
+  - **Goal**: Prevent deployment incidents through clear separation and simplified scripts
 
 ### ⚠️ Current Issues
 - **Lambda Layer Issue**: ✅ **FIXED** - Created complete Lambda layer with all dependencies (FastAPI, Mangum, Numpy, Pandas, yfinance, requests, etc.)
@@ -134,16 +143,40 @@ For rapid iteration during UI and Lambda code changes, use the new quick deploym
 # Quick deployment of both Lambda and frontend (recommended for development)
 ./infra/aws/deploy_quick.sh
 
-# Quick Lambda-only deployment (30-60 seconds vs 15+ minutes)
-./infra/aws/deploy_aws_onetime.sh --quick
+---
 
-# Quick frontend-only deployment (1-2 minutes vs 3-5 minutes)
-./infra/aws/deploy_frontend.sh --quick dev
+## 🚀 Deployment Commands (February 9, 2026)
 
-# Individual component updates
-./infra/aws/deploy_quick.sh --lambda-only          # Lambda only
-./infra/aws/deploy_quick.sh --frontend-only prod    # Frontend only
+### Local Development
+```bash
+./start.sh              # Start UI + backend together
+./stop.sh               # Stop both services
 ```
+
+### AWS Deployments - Incident Prevention
+```bash
+# Infrastructure (S3, CloudFront, API Gateway) - No Lambda
+./infra/aws/deploy_infra.sh
+
+# Lambda Deployments
+./backend/deploy_lambda_code.sh    # Code only (fast, safe)
+./backend/deploy_lambda_full.sh    # Lambda + infra
+
+# UI Deployment  
+./frontend/deploy_ui.sh            # Upload + CloudFront invalidation
+```
+
+### Key Safety Features
+- **Mutually Exclusive**: backend/, infra/, frontend/ have zero overlap
+- **Independent Scripts**: No orchestration dependencies
+- **Clear Purpose**: Each script does one thing well
+- **No Cross-Talk**: Can't accidentally break other components
+
+### Deployment Workflow
+1. **Initial Setup**: `./infra/aws/deploy_infra.sh` → `./backend/deploy_lambda_full.sh` → `./frontend/deploy_ui.sh`
+2. **Ongoing**: Update components independently as needed
+
+---
 
 #### Quick Deployment Benefits
 - **Speed**: Lambda updates in ~30-60 seconds, Frontend in ~1-2 minutes

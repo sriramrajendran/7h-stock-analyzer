@@ -1,18 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Transform: AWS::Serverless-2016-10-31
-Description: 7H Stock Analyzer - Serverless Stock Analysis Application
-
-Globals:
-  Function:
-    Runtime: python3.10
-    Timeout: 900
-    MemorySize: 512
-    Environment:
-      Variables:
-        APP_AWS_REGION: !Ref AWS::Region
-        S3_BUCKET_NAME: !Ref StockDataBucket
-        LOG_LEVEL: INFO
-        ENVIRONMENT: !Ref Environment
+Description: 7H Stock Analyzer - Infrastructure (S3, CloudFront, API Gateway)
 
 Parameters:
   Environment:
@@ -24,105 +11,10 @@ Parameters:
       - dev
 
 Resources:
-  StockAnalyzerFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      Handler: app.main.handler
-      CodeUri: s3://7h-stock-analyzer/stock-analyzer-lambda.zip
-      Description: Lambda function for stock analysis with FastAPI
-      Architectures:
-        - x86_64
-      Layers:
-        - !Ref DependenciesLayer
-      Runtime: python3.10
-      Timeout: 900
-      MemorySize: 512
-      Environment:
-        Variables:
-          APP_AWS_REGION: !Ref AWS::Region
-          S3_BUCKET_NAME: !Ref StockDataBucket
-          LOG_LEVEL: INFO
-          ENVIRONMENT: !Ref Environment
-      Role: !GetAtt StockAnalyzerExecutionRole.Arn
-      Events:
-        ApiHealth:
-          Type: HttpApi
-          Properties:
-            Path: /health
-            Method: GET
-        ApiRunNow:
-          Type: HttpApi
-          Properties:
-            Path: /run-now
-            Method: POST
-        ApiReconRun:
-          Type: HttpApi
-          Properties:
-            Path: /recon/run
-            Method: POST
-        ApiConfigUpdate:
-          Type: HttpApi
-          Properties:
-            Path: /config/update
-            Method: POST
-        ApiConfigValidate:
-          Type: HttpApi
-          Properties:
-            Path: /config/validate
-            Method: POST
-        ApiAnalysis:
-          Type: HttpApi
-          Properties:
-            Path: /analysis/{symbol}
-            Method: POST
-        ApiRecommendationsFallback:
-          Type: HttpApi
-          Properties:
-            Path: /recommendations
-            Method: GET
-
-  StockAnalyzerExecutionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Sub "${AWS::StackName}-execution-role"
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-      Policies:
-        - PolicyName: S3AccessPolicy
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action:
-                  - s3:ListBucket
-                Resource: !Sub "arn:aws:s3:::${StockDataBucket}"
-              - Effect: Allow
-                Action:
-                  - s3:GetObject
-                  - s3:PutObject
-                  - s3:DeleteObject
-                Resource: !Sub "arn:aws:s3:::${StockDataBucket}/*"
-
-  DependenciesLayer:
-    Type: AWS::Serverless::LayerVersion
-    Properties:
-      LayerName: StockAnalyzerDependencies
-      Description: Shared dependencies for stock analyzer
-      ContentUri: s3://7h-stock-analyzer/stock-analyzer-layer.zip
-      CompatibleRuntimes:
-        - python3.10
-      RetentionPolicy: Retain
-
   StockDataBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Retain
+    Properties:
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
@@ -291,30 +183,18 @@ Resources:
         Enabled: true
         PriceClass: PriceClass_100
 
-  StockAnalyzerLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub "/aws/lambda/${StockAnalyzerFunction}"
-      RetentionInDays: 3
-
 Outputs:
-  StockAnalyzerFunction:
-    Description: "Lambda Function ARN"
-    Value: !GetAtt StockAnalyzerFunction.Arn
+  StockDataBucket:
+    Description: "S3 bucket for stock data"
+    Value: !Ref StockDataBucket
     Export:
-      Name: !Sub "${AWS::StackName}-StockAnalyzerFunction"
+      Name: "7h-Stock-DataBucket"
 
   StockAnalyzerApi:
     Description: "API Gateway endpoint URL"
     Value: !Sub "https://${StockAnalyzerApi}.execute-api.${AWS::Region}.amazonaws.com"
     Export:
       Name: !Sub "${AWS::StackName}-StockAnalyzerApi"
-
-  StockDataBucket:
-    Description: "S3 bucket for stock data"
-    Value: !Ref StockDataBucket
-    Export:
-      Name: !Sub "${AWS::StackName}-StockDataBucket"
 
   StockAnalyzerCloudFront:
     Description: "CloudFront distribution URL"

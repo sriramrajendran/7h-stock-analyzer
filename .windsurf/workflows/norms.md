@@ -6,6 +6,29 @@ description: Guidelines for Windsurf to follow implementation norms
 
 ## Core Norms to Follow
 
+### Project Structure
+- Major project directories are: `backend`, `infra`, `frontend`, `doc`, `target`
+    - `backend` - contains the lambda code [including infra code for lambda]
+        - 1 sh file to deploy lambda code alone
+        - 1 sh file to deploy lambda code and infrastructure code
+        - 1 sh file to deploy this as a python app for local testing
+    - `infra` - contains the infrastructure code (only s3, cloudfront, api gateway, eventbridge, etc., except lambda)
+        - 1 sh file to deploy infrastructure code alone 
+    - `frontend` - contains the UI code
+        - 1 sh file to deploy code alone
+        - 1 sh file to deploy code and infrastructure code (cloudfront)
+    - `doc` - contains the documentation
+        - contains the spec files
+        - contains the deployment plan
+    - `target/` - directory for all non-git tracked files
+        - Build files, zip files, temporary scripts, deployment artifacts
+        - Generated outputs, compiled code, dependency caches
+        - Test results, logs, temporary data files
+- **NEVER** create new directories
+- **ALWAYS** add content to existing directories
+- Squeeze new directories into existing directories
+- Maintain backward compatibility
+
 ### 1. Pre-Implementation Planning
 **Always check implementation plan before implementing:**
 - Verify cost implications are documented
@@ -65,26 +88,74 @@ description: Guidelines for Windsurf to follow implementation norms
 - Additional configuration files
 - Duplicate functionality files
 
-### 5. File Cleanup Policy
+### 5. Non-Git Tracked Files Management
+**Target Directory Policy:**
+- **ALL** non-git tracked files must be placed in `target/` directory
+- Build files, zip files, temporary scripts, deployment artifacts
+- Generated outputs, compiled code, dependency caches
+- Test results, logs, temporary data files
+
+**Target Directory Structure:**
+```
+target/
+├── builds/          # Compiled code and build artifacts
+├── deployments/     # ZIP files and deployment packages
+├── temp/           # Temporary scripts and files
+├── cache/          # Dependency caches and downloads
+├── logs/           # Build and deployment logs
+└── cleanup/        # Files marked for deletion
+```
+
+**Automatic Cleanup Process:**
+1. **Build-time Cleanup**: Remove files older than 7 days automatically
+2. **Post-deployment Cleanup**: Remove temporary deployment files
+3. **Session Cleanup**: Clean temp files at end of development session
+4. **Storage Optimization**: Compress and archive old build artifacts
+
+**Cleanup Commands:**
+```bash
+# Clean files older than 7 days
+find target/ -type f -mtime +7 -delete
+
+# Clean temp files after deployment
+rm -rf target/temp/* target/deployments/*.tmp
+
+# Compress old builds
+find target/builds/ -type f -mtime +30 -gzip
+
+# Session cleanup
+rm -rf target/temp/* target/logs/*.log
+```
+
+**Git Ignore Configuration:**
+- Ensure `target/` is in `.gitignore`
+- All contents should be excluded from version control
+- Only directory structure should be tracked (empty target/)
+
+### 6. File Cleanup Policy
 **Windsurf-Created Files Cleanup:**
 - **ALWAYS** review Windsurf-created temporary files/scripts
 - **DOUBLE-CHECK** if files are actually being used
 - **REMOVE** unused Windsurf-created files immediately
 - **MAINTAIN** clean workspace without redundant files
+- **ENSURE** all temporary files go to `target/temp/`
 
 **Cleanup Process:**
 1. Identify Windsurf-created temporary files and scripts
-2. Verify if files are referenced or used in the codebase
-3. Remove unused files to prevent workspace clutter
-4. Document any important files that should be kept
+2. Move non-essential files to `target/cleanup/`
+3. Verify if files are referenced or used in the codebase
+4. Remove unused files from `target/cleanup/`
+5. Document any important files that should be kept
 
 **Common Files to Review:**
-- Temporary scripts in `infra/local/`
+- Temporary scripts in `target/temp/`
+- Build artifacts in `target/builds/`
+- Deployment files in `target/deployments/`
 - Test files that are no longer needed
 - Backup or duplicate files
 - Development artifacts and temporary outputs
 
-### 6. Implementation Process
+### 7. Implementation Process
 **Before Implementation:**
 1. Review `doc/aws-deployment-plan.md` for current status
 2. Check cost implications in existing documentation
@@ -103,7 +174,7 @@ description: Guidelines for Windsurf to follow implementation norms
 3. Confirm security measures are implemented
 4. Test all modifications work correctly
 
-### 7. Cost & Security Validation
+### 8. Cost & Security Validation
 **Cost Checks:**
 - Verify monthly cost estimates in documentation
 - Check for additional service costs
@@ -121,7 +192,7 @@ description: Guidelines for Windsurf to follow implementation norms
 - **Check for exposed credentials or sensitive data**
 - **Validate least privilege principle implementation**
 
-### 8. Documentation Updates Required
+### 9. Documentation Updates Required
 **For Each Implementation:**
 - Update "Current Status & Next Steps" section
 - Modify "Gap Analysis & Resolution Strategy" if applicable
@@ -129,7 +200,7 @@ description: Guidelines for Windsurf to follow implementation norms
 - Refresh "Security Configuration" if security changes made
 - Update "Success Criteria" checklist
 
-### 9. Quality Assurance
+### 10. Quality Assurance
 **Before Finalizing:**
 - All configurations in existing files
 - Documentation updated in `aws-deployment-plan.md`
@@ -158,9 +229,19 @@ for config in "${AWS_CONFIGS[@]}"; do
     fi
 done
 
-# Check for unused Windsurf-created files
+# Check for unused Windsurf-created files in target directory
 echo "🔍 Checking for unused Windsurf-created files..."
-find . -name "*.tmp" -o -name "*~" -o -name "*.bak" -o -name "*.orig" | grep -v node_modules
+find target/ -name "*.tmp" -o -name "*~" -o -name "*.bak" -o -name "*.orig" 2>/dev/null || echo "✅ No temporary files in target/"
+
+# Check target directory structure
+echo "📁 Checking target directory structure..."
+if [[ -d "target/" ]]; then
+    echo "✅ target/ directory exists"
+    find target/ -maxdepth 2 -type d | sort
+else
+    echo "⚠️  target/ directory missing - creating it..."
+    mkdir -p target/{builds,deployments,temp,cache,logs,cleanup}
+fi
 
 # Security vulnerability assessment for AWS capabilities
 echo "🔒 Running security vulnerability assessment..."
@@ -231,13 +312,27 @@ if [[ $(git diff --name-only | grep "doc/aws-deployment-plan.md" | wc -l) -eq 0 
     echo "⚠️  WARNING: Deployment plan not updated. Please update doc/aws-deployment-plan.md"
 fi
 
-# 4. Check for unused Windsurf-created files
+# 4. Check for unused Windsurf-created files in target
 echo "🔍 Checking for unused Windsurf-created files..."
-TEMP_FILES=$(find . -name "*.tmp" -o -name "*~" -o -name "*.bak" -o -name "*.orig" | grep -v node_modules)
+TEMP_FILES=$(find target/ -name "*.tmp" -o -name "*~" -o -name "*.bak" -o -name "*.orig" 2>/dev/null)
 if [[ ! -z "$TEMP_FILES" ]]; then
-    echo "⚠️  WARNING: Temporary files found. Review and remove if unused:"
+    echo "⚠️  WARNING: Temporary files found in target/. Review and remove if unused:"
     echo "$TEMP_FILES"
+else
+    echo "✅ No temporary files in target/"
 fi
+
+# 5. Verify target directory structure
+echo "📁 Verifying target directory structure..."
+TARGET_DIRS=("builds" "deployments" "temp" "cache" "logs" "cleanup")
+for dir in "${TARGET_DIRS[@]}"; do
+    if [[ -d "target/$dir" ]]; then
+        echo "✅ target/$dir exists"
+    else
+        echo "⚠️  target/$dir missing - creating..."
+        mkdir -p "target/$dir"
+    fi
+done
 
 # 6. AWS config sync validation
 echo "🔄 Checking AWS config sync status..."
@@ -321,7 +416,16 @@ echo "✅ No new markdown files created"
 echo "✅ No new config files created" 
 echo "✅ Documentation updated in aws-deployment-plan.md"
 echo "🔍 Checking for temporary files to cleanup..."
-find . -name "*.tmp" -o -name "*~" -o -name "*.bak" -o -name "*.orig" | grep -v node_modules || echo "✅ No temporary files found"
+find target/ -name "*.tmp" -o -name "*~" -o -name "*.bak" -o -name "*.orig" 2>/dev/null || echo "✅ No temporary files found in target/"
+
+echo "🧹 Running automatic cleanup..."
+# Clean temp files older than 1 day
+find target/temp/ -type f -mtime +1 -delete 2>/dev/null || true
+# Clean deployment temp files
+find target/deployments/ -name "*.tmp" -delete 2>/dev/null || true
+# Clean old logs (older than 3 days)
+find target/logs/ -name "*.log" -mtime +3 -delete 2>/dev/null || true
+echo "✅ Cleanup completed"
 echo "🔒 Final security vulnerability assessment..."
 # Check for any AWS changes in the session
 if git diff --name-only HEAD~1 | grep -E "\.(yaml|yml|json)$" >/dev/null 2>&1; then
