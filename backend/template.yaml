@@ -10,7 +10,7 @@ Globals:
     Environment:
       Variables:
         APP_AWS_REGION: !Ref AWS::Region
-        S3_BUCKET_NAME: !ImportValue 7h-Stock-DataBucket
+        S3_BUCKET_NAME: 7h-stock-analyzer
         LOG_LEVEL: INFO
         ENVIRONMENT: !Ref Environment
 
@@ -22,6 +22,18 @@ Parameters:
       - production
       - staging
       - dev
+  ApiKeyParameter:
+    Type: String
+    Description: API key for authentication
+    NoEcho: true
+  PushoverTokenParameter:
+    Type: String
+    Description: Pushover API token for notifications
+    NoEcho: true
+  PushoverUserParameter:
+    Type: String
+    Description: Pushover user key for notifications
+    NoEcho: true
 
 Resources:
   StockAnalyzerFunction:
@@ -40,9 +52,13 @@ Resources:
       Environment:
         Variables:
           APP_AWS_REGION: !Ref AWS::Region
-          S3_BUCKET_NAME: !ImportValue 7h-Stock-DataBucket
+          S3_BUCKET_NAME: 7h-stock-analyzer
           LOG_LEVEL: INFO
           ENVIRONMENT: !Ref Environment
+          API_KEY: !Ref ApiKeyParameter
+          REQUIRE_AUTH: "true"
+          PUSHOVER_TOKEN: !Ref PushoverTokenParameter
+          PUSHOVER_USER: !Ref PushoverUserParameter
       Role: !GetAtt StockAnalyzerExecutionRole.Arn
       Events:
         ApiHealth:
@@ -102,13 +118,13 @@ Resources:
               - Effect: Allow
                 Action:
                   - s3:ListBucket
-                Resource: !ImportValue 7h-Stock-DataBucket
+                Resource: "arn:aws:s3:::7h-stock-analyzer"
               - Effect: Allow
                 Action:
                   - s3:GetObject
                   - s3:PutObject
                   - s3:DeleteObject
-                Resource: !Sub "${!ImportValue 7h-Stock-DataBucket}/*"
+                Resource: "arn:aws:s3:::7h-stock-analyzer/*"
 
   DependenciesLayer:
     Type: AWS::Serverless::LayerVersion

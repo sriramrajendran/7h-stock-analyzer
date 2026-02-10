@@ -29,7 +29,7 @@ mkdir -p "$DEPLOY_DIR"
 
 # Package Lambda code
 cd app
-zip -r "$DEPLOY_DIR/stock-analyzer-lambda.zip" .
+zip -r "../../target/deployments/stock-analyzer-lambda.zip" . -x "__pycache__/*"
 cd ..
 
 echo "📤 Uploading Lambda package to S3..."
@@ -41,10 +41,11 @@ echo "🔄 Updating Lambda function code..."
 
 # Update Lambda function code (no infrastructure changes)
 aws lambda update-function-code \
-    --function-name StockAnalyzerFunction \
+    --function-name arn:aws:lambda:us-east-1:986440453821:function:stock-analyzer-lambda-StockAnalyzerFunction-BoJLhnbgfJxl \
     --s3-bucket 7h-stock-analyzer \
     --s3-key stock-analyzer-lambda.zip \
     --region "$AWS_REGION"
 
 echo "✅ Lambda code deployment completed!"
 echo "📊 Function updated without infrastructure changes"
+echo "🔐 Environment variables unchanged (use deploy_lambda_full.sh to update)"
