@@ -8,8 +8,8 @@ from mangum import Mangum
 from typing import List, Dict, Any
 import os
 import json
-from datetime import datetime
 from dataclasses import dataclass
+from datetime import datetime
 
 # Import analysis engine
 from app.engine.modular_recommender import run_modular_analysis, run_single_analysis

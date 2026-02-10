@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Deploying Lambda + Infrastructure..."
+echo "🚀 DEPLOYING LAMBDA - NUCLEAR APPROACH"
 
 # Load environment variables
 if [ ! -f ../.env.local ]; then
@@ -21,38 +21,47 @@ fi
 AWS_ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
 AWS_REGION=${AWS_REGION:-us-east-1}
 
-echo "📦 Building Lambda package..."
+echo "📦 Building minimal Lambda package..."
 
 # Create deployment directory
 DEPLOY_DIR="../target/deployments"
 mkdir -p "$DEPLOY_DIR"
 
-# Upload Lambda layer to S3 (if not already uploaded)
+# Create minimal layer
+LAYER_DIR="../target/layer"
+rm -rf "$LAYER_DIR"
+mkdir -p "$LAYER_DIR/python"
+
+cd "$LAYER_DIR/python"
+pip install fastapi==0.68.2 mangum==0.12.2 boto3==1.26.137 requests==2.28.2 --target . --no-deps --force-reinstall --quiet
+cd ../..
+
+# Package layer
+cd "$LAYER_DIR"
+zip -r "../../target/deployments/stock-analyzer-layer.zip" .
+cd ../../backend
+
+# Upload layer
 echo "📤 Uploading Lambda layer to S3..."
-aws s3 cp "$DEPLOY_DIR/stock-analyzer-layer.zip" "s3://7h-stock-analyzer/" --region "$AWS_REGION" || echo "Layer already exists"
+aws s3 cp "$DEPLOY_DIR/stock-analyzer-layer.zip" "s3://7h-stock-analyzer/" --region "$AWS_REGION"
 
-# Package Lambda code
-cd app
-zip -r "../../target/deployments/stock-analyzer-lambda.zip" . -x "__pycache__/*"
+# Package function code
+cd ../target/deployments
+rm -rf app_structure
+mkdir -p app_structure/app
+cp -r ../../backend/app/* app_structure/app/
+cd app_structure
+zip -r ../stock-analyzer-lambda.zip .
 cd ..
+rm -rf app_structure
+cd ../../backend
 
+# Upload function code
 echo "📤 Uploading Lambda package to S3..."
-
-# Upload to S3
 aws s3 cp "$DEPLOY_DIR/stock-analyzer-lambda.zip" "s3://7h-stock-analyzer/" --region "$AWS_REGION"
 
+# Deploy infrastructure
 echo "🏗️ Deploying Lambda infrastructure..."
-
-# Check if stack exists and is in ROLLBACK_COMPLETE state, delete if needed
-STACK_STATUS=$(aws cloudformation describe-stacks --stack-name stock-analyzer-lambda --query "Stacks[0].StackStatus" --output text 2>/dev/null || echo "DOES_NOT_EXIST")
-
-if [ "$STACK_STATUS" = "ROLLBACK_COMPLETE" ]; then
-    echo "🗑️ Deleting existing stack in ROLLBACK_COMPLETE state..."
-    aws cloudformation delete-stack --stack-name stock-analyzer-lambda --region "$AWS_REGION"
-    aws cloudformation wait stack-delete-complete --stack-name stock-analyzer-lambda --region "$AWS_REGION"
-fi
-
-# Deploy Lambda stack
 aws cloudformation deploy \
     --template-file template.yaml \
     --stack-name stock-analyzer-lambda \
@@ -60,6 +69,40 @@ aws cloudformation deploy \
     --parameter-overrides Environment=production ApiKeyParameter=$API_KEY PushoverTokenParameter=$PUSHOVER_TOKEN PushoverUserParameter=$PUSHOVER_USER \
     --region "$AWS_REGION"
 
-echo "✅ Lambda + infrastructure deployment completed!"
-echo "📊 Stack: 7h-stock-analyzer-lambda"
-echo "🔗 Function and infrastructure updated"
+# Create layer version
+echo "🔄 Creating new Lambda layer version..."
+LAYER_VERSION=$(aws lambda publish-layer-version \
+    --layer-name StockAnalyzerDependencies \
+    --description "NUCLEAR MINIMAL LAYER" \
+    --license-info "MIT" \
+    --compatible-runtimes python3.10 \
+    --zip-file fileb://"$DEPLOY_DIR/stock-analyzer-layer.zip" \
+    --region "$AWS_REGION" \
+    --query 'LayerVersionArn' \
+    --output text)
+
+# Update function
+echo "🔄 Updating Lambda to use new layer..."
+aws lambda update-function-configuration \
+    --function-name arn:aws:lambda:us-east-1:986440453821:function:stock-analyzer-lambda-StockAnalyzerFunction-BoJLhnbgfJxl \
+    --layers "$LAYER_VERSION" \
+    --region "$AWS_REGION"
+
+# Update function code
+echo "🔄 Updating Lambda function code..."
+aws lambda update-function-code \
+    --function-name arn:aws:lambda:us-east-1:986440453821:function:stock-analyzer-lambda-StockAnalyzerFunction-BoJLhnbgfJxl \
+    --s3-bucket 7h-stock-analyzer \
+    --s3-key stock-analyzer-lambda.zip \
+    --region "$AWS_REGION"
+
+echo "✅ NUCLEAR DEPLOYMENT COMPLETED!"
+echo "🧪 Testing Lambda function..."
+aws lambda invoke \
+    --function-name arn:aws:lambda:us-east-1:986440453821:function:stock-analyzer-lambda-StockAnalyzerFunction-BoJLhnbgfJxl \
+    --payload '{"httpMethod":"GET","path":"/health","headers":{"X-API-Key":"e0fb50277426ebfb42e571710cade9a8e0d5cfb58738a199cd256408374a02a8"}}' \
+    --cli-binary-format raw-in-base64-out \
+    ../target/response.json
+
+echo "📊 Response:"
+cat ../target/response.json

@@ -1,38 +1,4 @@
-# 7H Stock Analyzer - Complete Requirements
-# Used for both local development and AWS Lambda deployment
-
-# Core dependencies - install one by one to avoid compilation issues
-fastapi==0.65.0
-mangum==0.17.0
-uvicorn==0.15.0
-
-# Data analysis
-yfinance==0.2.28
-pandas==2.2.3
-numpy==2.2.6
-
-# AWS SDK
-boto3==1.36.0
-botocore==1.36.0
-
-# HTTP requests
-requests==2.31.0
-
-# Utilities
-python-dateutil==2.8.2
-pytz==2023.3
-
-# Additional dependencies for Lambda compatibility
-urllib3==2.2.2
-six==1.16.0
-certifi==2024.2.2
-
-# Testing dependencies
-pytest==7.4.3
-pytest-cov==4.1.0
-pytest-mock==3.12.0
-pytest-asyncio==0.21.1
-pytest-xdist==3.3.1
-
-# Note: pydantic removed temporarily to avoid compilation issues
-# Will add back after basic setup works
+fastapi==0.68.2
+mangum==0.12.2
+boto3==1.26.137
+requests==2.28.2

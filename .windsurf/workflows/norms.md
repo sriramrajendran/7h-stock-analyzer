@@ -29,6 +29,10 @@ description: Guidelines for Windsurf to follow implementation norms
 - Squeeze new directories into existing directories
 - Maintain backward compatibility
 
+## AWS Deployments
+- **ALWAYS** use the sh files in `backend` and `infra` directories to deploy
+- never use commands in aws to deploy outside of these sh files, so the script remains intact and sync with aws
+
 ### 1. Pre-Implementation Planning
 **Always check implementation plan before implementing:**
 - Verify cost implications are documented
